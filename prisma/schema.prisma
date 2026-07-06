@@ -1,0 +1,119 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --- Better Auth Models ---
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  keywords      Keyword[]
+  groups        MonitoredGroup[]
+  posts         Post[]
+  settings      Settings?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id           String    @id @default(cuid())
+  userId       String
+  accountId    String
+  providerId   String
+  accessToken  String?
+  refreshToken String?
+  idToken      String?
+  expiresAt    DateTime?
+  password     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// --- Application Models ---
+
+model Keyword {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword   String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, keyword])
+}
+
+model MonitoredGroup {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facebookGroupId String
+  name            String
+  enabled         Boolean  @default(true)
+  lastScan        DateTime?
+  createdAt       DateTime @default(now())
+  posts           Post[]
+  
+  @@unique([userId, facebookGroupId])
+}
+
+model Post {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facebookPostId String
+  groupId        String
+  group          MonitoredGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  keyword        String
+  content        String
+  url            String
+  relevant       Boolean
+  viewed         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, facebookPostId])
+}
+
+model Settings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanInterval    Int      @default(5)
+  activeFrom      String   @default("08:00")
+  activeTo        String   @default("20:00")
+  monitoringMode  String   @default("default")
+  groqApiKey      String?  // Encrypted API key
+}

@@ -1,0 +1,14 @@
+{
+  "name": "groupscout-extension",
+  "version": "1.0.0",
+  "description": "Chrome Extension for GroupScout",
+  "scripts": {
+    "build": "esbuild src/background/background.ts src/content/content.ts --bundle --outdir=dist",
+    "watch": "esbuild src/background/background.ts src/content/content.ts --bundle --outdir=dist --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.263",
+    "esbuild": "^0.20.1",
+    "typescript": "^5.4.2"
+  }
+}

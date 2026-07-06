@@ -1,0 +1,41 @@
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+import { prisma } from "@/lib/db"
+
+export async function GET() {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  try {
+    const keywords = await prisma.keyword.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+    })
+    return NextResponse.json(keywords)
+  } catch (error) {
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  try {
+    const body = await request.json()
+    const { keyword } = body
+
+    if (!keyword) return NextResponse.json({ error: "Keyword is required" }, { status: 400 })
+
+    const created = await prisma.keyword.create({
+      data: {
+        keyword,
+        userId: session.user.id,
+      },
+    })
+    return NextResponse.json(created)
+  } catch (error) {
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
