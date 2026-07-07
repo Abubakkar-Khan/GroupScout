@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { LayoutDashboard, Users, Tags, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { signOut } from "@/lib/auth-client"
+
 
 interface SidebarProps {
   collapsed: boolean
@@ -83,7 +83,8 @@ export function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
           variant="ghost"
           className={cn("w-full justify-start text-muted-foreground hover:text-destructive", collapsed && "justify-center px-0")}
           onClick={async () => {
-            await signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/login" } } })
+            await fetch("/api/auth/logout", { method: "POST" })
+            window.location.href = "/login"
           }}
           title={collapsed ? "Sign out" : undefined}
         >

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { signIn } from "@/lib/auth-client"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,13 +21,15 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    const { data, error } = await signIn.email({
-      email,
-      password,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
     })
 
-    if (error) {
-      toast.error(error.message || "Failed to sign in")
+    if (!res.ok) {
+      const data = await res.json()
+      toast.error(data.error || "Failed to sign in")
       setLoading(false)
       return
     }

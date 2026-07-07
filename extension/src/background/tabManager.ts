@@ -22,53 +22,80 @@ export function checkActiveHours(config: Config): boolean {
   }
 }
 
-export async function managePowerModeTabs(config: Config, isActive: boolean) {
-  if (config.monitoringMode !== "power") {
-    // If switched away from power mode, clean up managed tabs
-    if (managedTabIds.size > 0) {
-      closeManagedTabs();
-    }
-    return;
-  }
+export async function runBatchedPowerScan(config: Config) {
+  if (config.monitoringMode !== "power" || !config.groups || config.groups.length === 0) return;
+  
+  const BATCH_SIZE = 5;
+  console.log(`Power Mode: Starting batched scan of ${config.groups.length} groups`);
 
-  if (isActive && !isPowerModeActive) {
-    console.log("Power Mode: Active hours started. Opening tabs...");
-    isPowerModeActive = true;
-    await openGroupTabs(config.groups);
-  } else if (!isActive && isPowerModeActive) {
-    console.log("Power Mode: Active hours ended. Closing tabs...");
-    isPowerModeActive = false;
-    closeManagedTabs();
-  }
-}
+  for (let i = 0; i < config.groups.length; i += BATCH_SIZE) {
+    const batch = config.groups.slice(i, i + BATCH_SIZE);
+    console.log(`Processing batch ${i/BATCH_SIZE + 1}:`, batch);
 
-async function openGroupTabs(groups: string[]) {
-  // First, see what facebook tabs are already open to avoid duplicating
-  const tabs = await chrome.tabs.query({ url: "*://*.facebook.com/groups/*" });
-  const openGroups = new Set(
-    tabs.map(t => {
+    // Get currently active tab so we can restore focus
+    const [originalActiveTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    // Find already open facebook group tabs
+    const existingTabs = await chrome.tabs.query({ url: "*://*.facebook.com/groups/*" });
+    const openGroupMap = new Map<string, number>();
+    existingTabs.forEach(t => {
       const match = t.url?.match(/facebook\.com\/groups\/([^\/\?]+)/);
-      return match ? match[1] : null;
-    }).filter(Boolean)
-  );
+      if (match && t.id) openGroupMap.set(match[1], t.id);
+    });
 
-  for (const groupId of groups) {
-    if (!openGroups.has(groupId)) {
-      const tab = await chrome.tabs.create({
-        url: `https://www.facebook.com/groups/${groupId}`,
-        active: false // Open in background
-      });
-      if (tab.id) {
-        managedTabIds.add(tab.id);
+    const batchTabIdsToScan: number[] = [];
+    const batchTabIdsToClose: number[] = [];
+
+    // Open missing tabs
+    for (const groupId of batch) {
+      if (openGroupMap.has(groupId)) {
+        batchTabIdsToScan.push(openGroupMap.get(groupId)!);
+      } else {
+        // Open as active to prevent Chrome from throttling React rendering
+        const tab = await chrome.tabs.create({
+          url: `https://www.facebook.com/groups/${groupId}`,
+          active: true 
+        });
+        if (tab.id) {
+          batchTabIdsToScan.push(tab.id);
+          batchTabIdsToClose.push(tab.id);
+        }
       }
     }
-  }
-}
 
-function closeManagedTabs() {
-  const tabsToClose = Array.from(managedTabIds);
-  if (tabsToClose.length > 0) {
-    chrome.tabs.remove(tabsToClose).catch(console.error);
-    managedTabIds.clear();
+    // Restore focus to user's original tab immediately so we don't interrupt them
+    if (originalActiveTab?.id) {
+      await chrome.tabs.update(originalActiveTab.id, { active: true });
+    }
+
+    // Wait for Facebook DOM to initialize before sending scan
+    await new Promise(r => setTimeout(r, 7000));
+
+    // Trigger scan on all tabs in the batch concurrently
+    const scanPromises = batchTabIdsToScan.map(tabId => {
+      return new Promise<void>((resolve) => {
+        chrome.tabs.sendMessage(tabId, { action: "scan", config }, (response) => {
+          if (chrome.runtime.lastError) {
+             console.error(`Tab ${tabId} error:`, chrome.runtime.lastError);
+          }
+          resolve();
+        });
+      });
+    });
+
+    await Promise.all(scanPromises);
+    console.log(`Batch ${i/BATCH_SIZE + 1} scan complete. Closing opened tabs.`);
+
+    // Scan for this batch is complete. Close ONLY the tabs we opened.
+    if (batchTabIdsToClose.length > 0) {
+      chrome.tabs.remove(batchTabIdsToClose).catch(console.error);
+    }
+
+    // Wait a bit before starting the next batch
+    if (i + BATCH_SIZE < config.groups.length) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
+
+  console.log("Power Mode: All batched scans complete.");
 }

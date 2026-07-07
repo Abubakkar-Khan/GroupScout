@@ -1,12 +1,21 @@
 "use client"
 
-import { useSession } from "@/lib/auth-client"
+import { useEffect, useState } from "react"
 import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function Header() {
-  const { data: session } = useSession()
+  const [user, setUser] = useState<{name: string, email: string} | null>(null)
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.user) setUser(data.user)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <header className="flex h-14 items-center justify-end border-b border-border bg-background/50 backdrop-blur-xl px-6 gap-4">
@@ -17,12 +26,11 @@ export function Header() {
       
       <div className="flex items-center gap-2">
         <div className="text-right hidden sm:block">
-          <p className="text-sm font-medium leading-none">{session?.user.name}</p>
-          <p className="text-xs text-muted-foreground mt-1">{session?.user.email}</p>
+          <p className="text-sm font-medium leading-none">{user?.name}</p>
+          <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
         </div>
         <Avatar className="size-8 border border-border">
-          <AvatarImage src={session?.user.image || ""} />
-          <AvatarFallback>{session?.user.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+          <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
         </Avatar>
       </div>
     </header>

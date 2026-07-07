@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { headers } from "next/headers"
+import { getSession } from "@/lib/auth"
+
 import { prisma } from "@/lib/db"
 import { encrypt } from "@/lib/encryption"
 
 export async function GET() {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   try {
@@ -22,6 +22,7 @@ export async function GET() {
     return NextResponse.json({
       userId: session.user.id,
       scanInterval: settings.scanInterval,
+      autoScrollPages: settings.autoScrollPages,
       activeFrom: settings.activeFrom,
       activeTo: settings.activeTo,
       monitoringMode: settings.monitoringMode,
@@ -33,18 +34,19 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getSession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   try {
     const body = await request.json()
-    const { scanInterval, activeFrom, activeTo, monitoringMode, groqApiKey } = body
+    const { scanInterval, autoScrollPages, activeFrom, activeTo, monitoringMode, groqApiKey } = body
 
     const updateData: any = {
-      scanInterval,
-      activeFrom,
-      activeTo,
-      monitoringMode,
+      scanInterval: isNaN(scanInterval) || scanInterval === null ? 5 : scanInterval,
+      autoScrollPages: isNaN(autoScrollPages) || autoScrollPages === null ? 5 : autoScrollPages,
+      activeFrom: activeFrom || "08:00",
+      activeTo: activeTo || "20:00",
+      monitoringMode: monitoringMode || "default",
     }
 
     if (groqApiKey) {
@@ -62,12 +64,14 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       scanInterval: settings.scanInterval,
+      autoScrollPages: settings.autoScrollPages,
       activeFrom: settings.activeFrom,
       activeTo: settings.activeTo,
       monitoringMode: settings.monitoringMode,
       groqApiKey: !!settings.groqApiKey,
     })
   } catch (error) {
+    console.error("Settings PATCH error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

@@ -13,11 +13,10 @@ model User {
   id            String    @id @default(cuid())
   name          String
   email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
+  password      String
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  accounts      Account[]
   sessions      Session[]
   keywords      Keyword[]
   groups        MonitoredGroup[]
@@ -35,32 +34,6 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Account {
-  id           String    @id @default(cuid())
-  userId       String
-  accountId    String
-  providerId   String
-  accessToken  String?
-  refreshToken String?
-  idToken      String?
-  expiresAt    DateTime?
-  password     String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([providerId, accountId])
-}
-
-model Verification {
-  id         String   @id @default(cuid())
-  identifier String
-  value      String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
 }
 
 // --- Application Models ---
@@ -115,5 +88,6 @@ model Settings {
   activeFrom      String   @default("08:00")
   activeTo        String   @default("20:00")
   monitoringMode  String   @default("default")
+  autoScrollPages Int      @default(5)
   groqApiKey      String?  // Encrypted API key
 }

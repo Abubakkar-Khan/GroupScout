@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
+import { getSession } from "@/lib/auth"
 
-// Allow CORS for the Chrome Extension
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-user-id",
+function getCorsHeaders(request: Request) {
+  return {
+    "Access-Control-Allow-Origin": request.headers.get("origin") || "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  }
 }
 
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders })
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: getCorsHeaders(request) })
 }
 
 export async function GET(request: Request) {
-  const userId = request.headers.get("x-user-id")
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(request) })
+  const userId = session.user.id
 
   try {
     const [keywords, settings, groups] = await Promise.all([
@@ -35,11 +39,12 @@ export async function GET(request: Request) {
       keywords: keywords.map(k => k.keyword),
       groups: groups.map(g => g.facebookGroupId),
       scanInterval: settings?.scanInterval || 5,
+      autoScrollPages: settings?.autoScrollPages ?? 5,
       activeFrom: settings?.activeFrom || "08:00",
       activeTo: settings?.activeTo || "20:00",
       monitoringMode: settings?.monitoringMode || "default",
-    }, { headers: corsHeaders })
+    }, { headers: getCorsHeaders(request) })
   } catch (error) {
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: corsHeaders })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: getCorsHeaders(request) })
   }
 }

@@ -6,24 +6,35 @@
   "permissions": [
     "storage",
     "alarms",
-    "tabs"
+    "tabs",
+    "cookies"
   ],
   "host_permissions": [
     "*://*.facebook.com/*",
     "http://localhost:3000/*"
   ],
+  "icons": {
+    "16": "public/icons/icon16.png",
+    "48": "public/icons/icon48.png",
+    "128": "public/icons/icon128.png"
+  },
   "background": {
-    "service_worker": "dist/background.js"
+    "service_worker": "dist/background/background.js"
   },
   "content_scripts": [
     {
       "matches": ["*://*.facebook.com/groups/*"],
-      "js": ["dist/content.js"],
+      "js": ["dist/content/content.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "GroupScout"
+    "default_title": "GroupScout",
+    "default_icon": {
+      "16": "public/icons/icon16.png",
+      "48": "public/icons/icon48.png",
+      "128": "public/icons/icon128.png"
+    }
   }
 }

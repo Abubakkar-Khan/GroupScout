@@ -1,36 +1,29 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const userIdInput = document.getElementById('userId');
-  const saveBtn = document.getElementById('saveBtn');
+  const dashboardBtn = document.getElementById('dashboardBtn');
   const statusDiv = document.getElementById('status');
 
-  // Load existing
-  chrome.storage.local.get(['userId'], (result) => {
-    if (result.userId) {
-      userIdInput.value = result.userId;
-      statusDiv.textContent = 'Connected';
-      statusDiv.className = 'status success';
-    }
+  dashboardBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'http://localhost:3000/dashboard' });
   });
 
-  saveBtn.addEventListener('click', () => {
-    const userId = userIdInput.value.trim();
-    if (!userId) {
-      statusDiv.textContent = 'Please enter a valid User ID';
+  // Verify connection by fetching config
+  chrome.runtime.sendMessage({ action: 'checkConnection' }, (response) => {
+    if (response && response.success) {
+      statusDiv.textContent = 'Active & Connected to Dashboard';
+      statusDiv.className = 'status success';
+      
+      // Fetch the actual config to display stats
+      chrome.runtime.sendMessage({ action: 'getConfig' }, (res) => {
+        if (res && res.config) {
+          document.getElementById('statsContainer').style.display = 'block';
+          document.getElementById('keywordCount').textContent = res.config.keywords?.length || 0;
+          document.getElementById('groupCount').textContent = res.config.groups?.length || 0;
+        }
+      });
+
+    } else {
+      statusDiv.textContent = 'Please log into the dashboard first.';
       statusDiv.className = 'status error';
-      return;
     }
-
-    statusDiv.textContent = 'Connecting...';
-    statusDiv.className = 'status';
-
-    chrome.runtime.sendMessage({ action: 'updateUserId', userId }, (response) => {
-      if (response && response.success) {
-        statusDiv.textContent = 'Connected successfully!';
-        statusDiv.className = 'status success';
-      } else {
-        statusDiv.textContent = 'Failed to connect to server. Check ID or server status.';
-        statusDiv.className = 'status error';
-      }
-    });
   });
 });

@@ -1,40 +1,42 @@
 import { fetchConfig } from "./api";
-import { checkActiveHours, managePowerModeTabs } from "./tabManager";
+import { checkActiveHours, runBatchedPowerScan } from "./tabManager";
 import { Config } from "./types";
 
 let config: Config | null = null;
 
-async function syncConfig(userId: string) {
-  const newConfig = await fetchConfig(userId);
+async function syncConfig() {
+  const newConfig = await fetchConfig();
   if (newConfig) {
     config = newConfig;
     console.log("Config loaded", config);
     chrome.alarms.create("scanGroups", { 
       periodInMinutes: parseInt(config.scanInterval as any) || 5 
     });
-    
-    // Immediately check tab state for Power Mode
-    const isActive = checkActiveHours(config);
-    await managePowerModeTabs(config, isActive);
+    // We no longer immediately open tabs for Power Mode. 
+    // They are opened in batches when the alarm triggers.
     return true;
   }
   return false;
 }
 
 // Initial load
-chrome.storage.local.get(["userId"], (result) => {
-  if (result.userId) {
-    syncConfig(result.userId);
-  }
-});
+syncConfig();
+
+// Verify connection loop every 15 min just to be safe
+chrome.alarms.create("syncConfig", { periodInMinutes: 15 });
 
 // Alarm handler (Interval Verification)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === "syncConfig") {
+    syncConfig();
+  }
+
   if (alarm.name === "scanGroups" && config) {
     const isActive = checkActiveHours(config);
-    
     // Manage Power Mode tabs
-    await managePowerModeTabs(config, isActive);
+    if (config.monitoringMode === "power") {
+      await runBatchedPowerScan(config);
+    }
     
     if (!isActive) {
       console.log("Outside active hours, skipping scan");
@@ -54,22 +56,21 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Listen for messages from content script or popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "updateUserId") {
-    chrome.storage.local.set({ userId: request.userId });
-    syncConfig(request.userId).then(success => {
+  if (request.action === "checkConnection") {
+    syncConfig().then(success => {
       sendResponse({ success });
     });
     return true; // async response
   }
   
   if (request.action === "ingestPost") {
-    chrome.storage.local.get(["userId"], (result) => {
-      if (result.userId) {
+    chrome.cookies.get({ url: "http://localhost:3000", name: "sessionId" }, (cookie) => {
+      if (cookie && cookie.value) {
         fetch("http://localhost:3000/api/extension/ingest", {
           method: "POST",
-          headers: {
+          headers: { 
             "Content-Type": "application/json",
-            "x-user-id": result.userId
+            "Authorization": `Bearer ${cookie.value}`
           },
           body: JSON.stringify(request.data)
         }).then(res => res.json()).then(data => {

@@ -1,18 +1,18 @@
 import { startObserver } from "./observer";
-import { runFullScan } from "./scanner";
-import { getKeywordsFromBackground } from "./api";
+import { runSmartScan } from "./scanner";
+import { getConfigFromBackground } from "./api";
 
 console.log("GroupScout Extension injected");
 
 async function init() {
-  const keywords = await getKeywordsFromBackground();
+  const config = await getConfigFromBackground();
   
-  if (keywords.length > 0) {
-    // 1. Initial Scan
-    runFullScan(keywords);
+  if (config && config.keywords && config.keywords.length > 0) {
+    // 1. Initial Smart Scan (Auto-Scroll)
+    await runSmartScan(config);
     
     // 2. Start Real-time Detection
-    startObserver(keywords);
+    startObserver(config.keywords);
   } else {
     console.log("GroupScout: No active keywords found. Monitoring idle.");
   }
@@ -23,7 +23,8 @@ init();
 
 // Also listen for manual scan triggers from background (e.g. interval verification)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "scan" && request.keywords) {
-    runFullScan(request.keywords);
+  if (request.action === "scan" && request.config) {
+    runSmartScan(request.config).then(() => sendResponse({ status: "done" }));
+    return true; // Keep message channel open for async response
   }
 });

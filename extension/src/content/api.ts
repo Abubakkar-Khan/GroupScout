@@ -14,14 +14,13 @@ export function sendToBackground(post: PostData, keyword: string) {
   });
 }
 
-// Fetch keywords from background script to avoid querying local storage constantly
-export function getKeywordsFromBackground(): Promise<string[]> {
+export function getConfigFromBackground(): Promise<any> {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: "getConfig" }, (response) => {
-      if (response && response.config && response.config.keywords) {
-        resolve(response.config.keywords);
+      if (response && response.config) {
+        resolve(response.config);
       } else {
-        resolve([]);
+        resolve(null);
       }
     });
   });

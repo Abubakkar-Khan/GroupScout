@@ -2,33 +2,41 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { classifyPost, getGroqClient } from "@/lib/groq"
 import { encrypt, decrypt } from "@/lib/encryption"
+import { getSession } from "@/lib/auth"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-user-id",
+function getCorsHeaders(request: Request) {
+  return {
+    "Access-Control-Allow-Origin": request.headers.get("origin") || "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  }
 }
 
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders })
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: getCorsHeaders(request) })
 }
 
 export async function POST(request: Request) {
-  const userId = request.headers.get("x-user-id")
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: getCorsHeaders(request) })
+  const userId = session.user.id
 
   try {
     const body = await request.json()
     const { groupId, groupName, postId, content, url, keyword } = body
 
     if (!groupId || !postId || !content) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     // Upsert the group
     const group = await prisma.monitoredGroup.upsert({
       where: { userId_facebookGroupId: { userId, facebookGroupId: groupId } },
-      update: { lastScan: new Date() },
+      update: { 
+        lastScan: new Date(),
+        ...(groupName && groupName !== "Unknown Group" ? { name: groupName } : {})
+      },
       create: {
         userId,
         facebookGroupId: groupId,
@@ -37,7 +45,7 @@ export async function POST(request: Request) {
     })
 
     if (!group.enabled) {
-      return NextResponse.json({ message: "Group is paused" }, { headers: corsHeaders })
+      return NextResponse.json({ message: "Group is paused" }, { headers: getCorsHeaders(request) })
     }
 
     // Check if post already exists
@@ -46,37 +54,38 @@ export async function POST(request: Request) {
     })
 
     if (existing) {
-      return NextResponse.json({ message: "Already processed" }, { headers: corsHeaders })
+      return NextResponse.json({ message: "Already processed" }, { headers: getCorsHeaders(request) })
     }
 
     // Classify using Groq
     const settings = await prisma.settings.findUnique({ where: { userId } })
     if (!settings?.groqApiKey) {
-      return NextResponse.json({ error: "Groq API key not configured" }, { status: 400, headers: corsHeaders })
+      return NextResponse.json({ error: "Groq API key not configured" }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     const groq = getGroqClient(settings.groqApiKey)
     const isRelevant = await classifyPost(groq, keyword || "Unknown", content)
 
+    // Save ALL posts (for the live dashboard feed), mark relevance
+    await prisma.post.create({
+      data: {
+        userId,
+        facebookPostId: postId,
+        groupId: group.id,
+        keyword: keyword || "Unknown",
+        content,
+        url: url || `https://facebook.com/groups/${groupId}/posts/${postId}`,
+        relevant: isRelevant
+      }
+    })
+
     if (isRelevant) {
-      // Save it
-      await prisma.post.create({
-        data: {
-          userId,
-          facebookPostId: postId,
-          groupId: group.id,
-          keyword: keyword || "Unknown",
-          content,
-          url: url || `https://facebook.com/groups/${groupId}/posts/${postId}`,
-          relevant: true
-        }
-      })
-      return NextResponse.json({ message: "Relevant lead saved" }, { headers: corsHeaders })
+      return NextResponse.json({ message: "Relevant lead saved" }, { headers: getCorsHeaders(request) })
     }
 
-    return NextResponse.json({ message: "Not relevant" }, { headers: corsHeaders })
+    return NextResponse.json({ message: "Ignored by AI" }, { headers: getCorsHeaders(request) })
   } catch (error) {
     console.error("Ingest error:", error)
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: corsHeaders })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: getCorsHeaders(request) })
   }
 }

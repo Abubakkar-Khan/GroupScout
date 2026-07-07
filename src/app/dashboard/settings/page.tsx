@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState({
     userId: "",
     scanInterval: "5",
+    autoScrollPages: "5",
     activeFrom: "08:00",
     activeTo: "20:00",
     monitoringMode: "default",
@@ -31,6 +32,7 @@ export default function SettingsPage() {
           setSettings({
             userId: data.userId || "",
             scanInterval: data.scanInterval?.toString() || "5",
+            autoScrollPages: data.autoScrollPages?.toString() || "5",
             activeFrom: data.activeFrom || "08:00",
             activeTo: data.activeTo || "20:00",
             monitoringMode: data.monitoringMode || "default",
@@ -61,6 +63,7 @@ export default function SettingsPage() {
         method: "PATCH",
         body: JSON.stringify({
           scanInterval: parseInt(settings.scanInterval, 10),
+          autoScrollPages: parseInt(settings.autoScrollPages, 10),
           activeFrom: settings.activeFrom,
           activeTo: settings.activeTo,
           monitoringMode: settings.monitoringMode,
@@ -90,37 +93,7 @@ export default function SettingsPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6 max-w-3xl">
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50 border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-primary">Extension Connection</CardTitle>
-            <CardDescription>Use this ID to connect your Chrome Extension to your account.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-start">
-              <Label>Your User ID</Label>
-              {loading ? <Skeleton className="h-10 w-full" /> : (
-                <div className="flex gap-2">
-                  <Input 
-                    type="text" 
-                    value={settings.userId} 
-                    readOnly 
-                    className="bg-background/50 font-mono text-sm text-muted-foreground" 
-                  />
-                  <Button 
-                    type="button" 
-                    variant="secondary" 
-                    onClick={() => {
-                      navigator.clipboard.writeText(settings.userId);
-                      toast.success("User ID copied to clipboard");
-                    }}
-                  >
-                    Copy
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+
 
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader>
@@ -144,6 +117,19 @@ export default function SettingsPage() {
                       <SelectItem value="15">15 minutes</SelectItem>
                     </SelectContent>
                   </Select>
+                )}
+              </div>
+              <div className="space-y-2 text-start">
+                <Label>Auto-Scroll Pages (History depth)</Label>
+                {loading ? <Skeleton className="h-10 w-full" /> : (
+                  <Input 
+                    type="number" 
+                    min="0"
+                    max="50"
+                    value={settings.autoScrollPages} 
+                    onChange={(e) => setSettings({ ...settings, autoScrollPages: e.target.value })}
+                    className="bg-background/50" 
+                  />
                 )}
               </div>
             </div>

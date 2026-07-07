@@ -86,12 +86,22 @@
     GroupScout
   </div>
   
-  <div class="form-group">
-    <label for="userId">User ID</label>
-    <input type="text" id="userId" placeholder="Paste your User ID here">
+  <div class="form-group" style="text-align: center; color: #A1A1AA; font-size: 14px; margin-bottom: 20px;">
+    GroupScout is connected to your active browser session automatically.
+  </div>
+
+  <div id="statsContainer" style="display: none; background: #18181B; border: 1px solid #27272A; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+      <span style="color: #A1A1AA; font-size: 13px;">Active Keywords:</span>
+      <strong id="keywordCount" style="color: #FAFAFA; font-size: 14px;">0</strong>
+    </div>
+    <div style="display: flex; justify-content: space-between;">
+      <span style="color: #A1A1AA; font-size: 13px;">Monitored Groups:</span>
+      <strong id="groupCount" style="color: #10B981; font-size: 14px;">0</strong>
+    </div>
   </div>
   
-  <button id="saveBtn">Save & Connect</button>
+  <button id="dashboardBtn">Open Dashboard</button>
   
   <div id="status" class="status"></div>
   

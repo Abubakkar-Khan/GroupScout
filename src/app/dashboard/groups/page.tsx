@@ -21,6 +21,8 @@ interface Group {
 export default function GroupsPage() {
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
+  const [newGroupUrl, setNewGroupUrl] = useState("")
+  const [adding, setAdding] = useState(false)
 
   const fetchGroups = async () => {
     try {
@@ -62,6 +64,32 @@ export default function GroupsPage() {
     }
   }
 
+  const addGroup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newGroupUrl.trim()) return
+
+    setAdding(true)
+    try {
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        body: JSON.stringify({ url: newGroupUrl })
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        toast.success("Group added to monitoring")
+        setNewGroupUrl("")
+        fetchGroups() // Refresh list
+      } else {
+        toast.error(data.error || "Failed to add group")
+      }
+    } catch (error) {
+      toast.error("An error occurred")
+    } finally {
+      setAdding(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -71,8 +99,30 @@ export default function GroupsPage() {
 
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">
         <CardHeader>
+          <CardTitle>Add Group</CardTitle>
+          <CardDescription>Manually add a Facebook Group to monitor.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={addGroup} className="flex gap-2">
+            <input
+              type="url"
+              placeholder="https://www.facebook.com/groups/..."
+              value={newGroupUrl}
+              onChange={(e) => setNewGroupUrl(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              required
+            />
+            <Button type="submit" disabled={adding}>
+              {adding ? "Adding..." : "Add"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+        <CardHeader>
           <CardTitle>Your Groups</CardTitle>
-          <CardDescription>Groups are automatically added when you visit them with the extension enabled.</CardDescription>
+          <CardDescription>Groups are automatically added when you visit them, or you can add them above.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
