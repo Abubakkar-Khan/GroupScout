@@ -62,7 +62,7 @@ export async function GET() {
       totalScraped: totalScrapedAgg._sum.postsScanned || 0,
       extensionState: isConnected ? extensionState : null
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

@@ -13,7 +13,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     })
     return NextResponse.json(keywords)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       },
     })
     return NextResponse.json(created)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

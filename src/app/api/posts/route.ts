@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/db"
 
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   const relevantParam = searchParams.get("relevant")
   const viewedParam = searchParams.get("viewed")
   
-  let whereClause: any = { userId: session.user.id }
+  const whereClause: Prisma.PostWhereInput = { userId: session.user.id }
   if (relevantParam === "true") whereClause.relevant = true
   if (relevantParam === "false") whereClause.relevant = false
   if (viewedParam === "true") whereClause.viewed = true
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
       take: limit,
     })
     return NextResponse.json(posts)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

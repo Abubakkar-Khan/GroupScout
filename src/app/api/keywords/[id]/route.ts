@@ -15,12 +15,15 @@ export async function PATCH(
     const body = await request.json()
     const { enabled } = body
 
-    const keyword = await prisma.keyword.update({
+    const keyword = await prisma.keyword.updateMany({
       where: { id, userId: session.user.id },
       data: { enabled },
     })
-    return NextResponse.json(keyword)
-  } catch (error) {
+    if (keyword.count === 0) return NextResponse.json({ error: "Keyword not found" }, { status: 404 })
+
+    const updated = await prisma.keyword.findUnique({ where: { id } })
+    return NextResponse.json(updated)
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -34,11 +37,12 @@ export async function DELETE(
 
   try {
     const { id } = await params
-    await prisma.keyword.delete({
-      where: { id, userId: session.user.id },
-    })
+    const keyword = await prisma.keyword.findFirst({ where: { id, userId: session.user.id } })
+    if (!keyword) return NextResponse.json({ error: "Keyword not found" }, { status: 404 })
+
+    await prisma.keyword.delete({ where: { id } })
     return new NextResponse(null, { status: 204 })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

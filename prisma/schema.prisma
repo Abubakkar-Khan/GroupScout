@@ -90,18 +90,18 @@ model Keyword {
 
 model MonitoredGroup {
   id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   facebookGroupId String
   name            String
   iconUrl         String?
   enabled         Boolean  @default(true)
   lastScan        DateTime?
   postsScanned    Int      @default(0)
-  createdAt       DateTime @default(now())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   posts           Post[]
-  
-  @@unique([userId, facebookGroupId])
+  createdAt       DateTime @default(now())
+
+  @@unique([facebookGroupId, userId])
 }
 
 model LogEvent {

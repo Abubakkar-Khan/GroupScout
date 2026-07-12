@@ -3,7 +3,9 @@ import { getSession } from "@/lib/auth"
 
 // In-memory store for test results (since it's a transient dev tool)
 // In a real production app we'd use Redis or Postgres
-let latestTestResult: any = null;
+type ParserTestResult = Record<string, unknown> & { timestamp: number };
+
+let latestTestResult: ParserTestResult | null = null;
 
 function getCorsHeaders(request: Request) {
   return {
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
       ...data
     }
     return NextResponse.json({ success: true }, { headers: getCorsHeaders(request) })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: getCorsHeaders(request) })
   }
 }

@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+import { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/db"
+
+function extractFacebookGroupId(value: string): string | null {
+  const trimmed = value.trim()
+  const match = trimmed.match(/(?:m\.|www\.)?facebook\.com\/groups\/([^/?#]+)/i)
+  const rawId = match?.[1] || (/^[a-zA-Z0-9_.-]+$/.test(trimmed) ? trimmed : null)
+  return rawId ? decodeURIComponent(rawId).replace(/\/$/, "") : null
+}
 
 export async function GET() {
   const session = await getSession()
@@ -32,7 +40,7 @@ export async function GET() {
     }))
     
     return NextResponse.json(formattedGroups)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -45,8 +53,7 @@ export async function POST(request: Request) {
     const { url } = await request.json()
     if (!url) return NextResponse.json({ error: "URL is required" }, { status: 400 })
 
-    const match = url.match(/facebook\.com\/groups\/([^\/\?]+)/)
-    const facebookGroupId = match ? match[1] : null
+    const facebookGroupId = extractFacebookGroupId(url)
 
     if (!facebookGroupId) {
       return NextResponse.json({ error: "Invalid Facebook Group URL" }, { status: 400 })
@@ -62,8 +69,8 @@ export async function POST(request: Request) {
     })
     
     return NextResponse.json(group)
-  } catch (error: any) {
-    if (error.code === 'P2002') {
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ error: "Group is already being monitored" }, { status: 400 })
     }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

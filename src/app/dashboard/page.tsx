@@ -23,7 +23,7 @@ interface Lead {
   group: { name: string, iconUrl?: string | null }
 }
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([])
@@ -267,7 +267,7 @@ export default function DashboardPage() {
                 <span className="text-base truncate">{selectedPost?.group?.name}</span>
                 <span className="text-xs text-muted-foreground font-normal">
                   {selectedPost && formatDistanceToNow(new Date(selectedPost.createdAt), { addSuffix: true })}
-                  {" • "}
+                  {" - "}
                   Keyword: <span className="font-mono text-emerald-500">{selectedPost?.keyword}</span>
                 </span>
               </div>

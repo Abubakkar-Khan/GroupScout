@@ -25,15 +25,18 @@ export default function KeywordsPage() {
     try {
       const res = await fetch("/api/keywords")
       if (res.ok) setKeywords(await res.json())
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchKeywords()
+    const timeout = window.setTimeout(() => {
+      void fetchKeywords()
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [])
 
   const addKeyword = async (e: React.FormEvent) => {
@@ -54,7 +57,7 @@ export default function KeywordsPage() {
       } else {
         toast.error("Failed to add keyword")
       }
-    } catch (e) {
+    } catch {
       toast.error("Error adding keyword")
     } finally {
       setAdding(false)
@@ -68,7 +71,7 @@ export default function KeywordsPage() {
         method: "PATCH",
         body: JSON.stringify({ enabled })
       })
-    } catch (e) {
+    } catch {
       toast.error("Failed to update keyword")
       fetchKeywords()
     }
@@ -79,7 +82,7 @@ export default function KeywordsPage() {
     try {
       await fetch(`/api/keywords/${id}`, { method: "DELETE" })
       toast.success("Keyword removed")
-    } catch (e) {
+    } catch {
       toast.error("Failed to remove keyword")
       fetchKeywords()
     }

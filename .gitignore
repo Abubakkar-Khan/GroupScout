@@ -43,3 +43,9 @@ next-env.d.ts
 # Chrome Extension
 /extension/node_modules
 /extension/dist
+
+# GroupScout Specific
+/chrome-data/
+/prisma/*.db
+/prisma/*.db-journal
+*.log

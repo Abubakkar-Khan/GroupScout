@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       activeTo: settings?.activeTo || "20:00",
       monitoringMode: settings?.monitoringMode || "default",
     }, { headers: getCorsHeaders(request) })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: getCorsHeaders(request) })
   }
 }

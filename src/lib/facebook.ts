@@ -1,4 +1,4 @@
-import { chromium, BrowserContext, Page } from "playwright";
+import { chromium, BrowserContext, Page, Response } from "playwright";
 import fs from "fs";
 import path from "path";
 
@@ -6,6 +6,17 @@ const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
 const USER_DATA_DIR = path.join(process.cwd(), "chrome-data");
 
 export interface FacebookPost {
+  postId: string;
+  url: string;
+  author: string;
+  content: string;
+  timestamp: string;
+  groupId: string;
+}
+
+type JsonObject = Record<string, unknown>;
+
+interface DomPost {
   postId: string;
   url: string;
   author: string;
@@ -46,6 +57,105 @@ async function randomMouseMove(page: Page) {
   await page.mouse.move(x, y, { steps: randInt(5, 15) });
 }
 
+function stableHash(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return `hash_${Math.abs(hash)}`;
+}
+
+function textFromMaybeMessage(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object") return "";
+
+  const obj = value as JsonObject;
+  if (typeof obj.text === "string") return obj.text.trim();
+  if (Array.isArray(obj.ranges) && typeof obj.text === "string") return obj.text.trim();
+  return "";
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function getNestedObject(value: unknown, key: string): JsonObject | null {
+  if (!value || typeof value !== "object") return null;
+  const nested = (value as JsonObject)[key];
+  return nested && typeof nested === "object" && !Array.isArray(nested) ? nested as JsonObject : null;
+}
+
+/** Recursively search intercepted JSON for Facebook posts */
+function deepExtractPosts(obj: unknown, results: FacebookPost[], groupId: string) {
+  if (!obj || typeof obj !== "object") return;
+
+  const current = obj as JsonObject;
+  const message = textFromMaybeMessage(current.message) || textFromMaybeMessage(current.comet_sections);
+
+  // Pattern: Comet story node with message
+  if (message.length > 5) {
+    let url = stringValue(current.url) || stringValue(current.share_url) || stringValue(current.story_url);
+    let author = "Unknown";
+    let postId = stringValue(current.id) || stringValue(current.post_id) || stringValue(current.legacy_fbid);
+
+    if (Array.isArray(current.actors) && current.actors.length > 0) {
+      const actor = current.actors[0] as JsonObject;
+      author = stringValue(actor.name) || author;
+    }
+
+    const feedback = getNestedObject(current, "feedback");
+    if (!postId && feedback) {
+      postId = stringValue(feedback.subscription_target_id) || stringValue(feedback.id);
+    }
+
+    const permalink = getNestedObject(current, "permalink_url");
+    if (!url && permalink) url = stringValue(permalink.url);
+
+    if (!url && postId) {
+      url = `https://www.facebook.com/groups/${groupId}/posts/${postId}`;
+    }
+
+    if (!postId) {
+      postId = stableHash(`${groupId}:${message}`);
+    }
+
+    const isDuplicate = results.some(p => p.postId === postId || p.content === message);
+    
+    if (!isDuplicate) {
+      results.push({
+        postId,
+        url: url || `https://www.facebook.com/groups/${groupId}`,
+        author,
+        content: message,
+        timestamp: new Date().toISOString(),
+        groupId
+      });
+    }
+  }
+
+  // Iterate over children (JSON.parse produces tree without cycles, so this is safe)
+  for (const key of Object.keys(current)) {
+    const value = current[key];
+    if (value !== null && typeof value === "object") {
+      deepExtractPosts(value, results, groupId);
+    }
+  }
+}
+
+function parseGraphqlPayload(text: string): unknown[] {
+  const payloads: unknown[] = [];
+  for (const part of text.split(/\r?\n/)) {
+    const trimmed = part.trim().replace(/^for\s*\(;;\);/, "");
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) continue;
+    try {
+      payloads.push(JSON.parse(trimmed));
+    } catch {
+      // Facebook often mixes transport metadata and JSON fragments; ignore fragments that are not parseable.
+    }
+  }
+  return payloads;
+}
+
 // ─── Main Automator ───────────────────────────────────────────────────
 
 export class FacebookAutomator {
@@ -55,8 +165,14 @@ export class FacebookAutomator {
   async init() {
     // If already initialised, reuse the existing context
     if (this.context && this.page) {
-      console.log("[FacebookAutomator] Reusing existing browser session.");
-      return;
+      if (!this.page.isClosed()) {
+        console.log("[FacebookAutomator] Reusing existing browser session.");
+        return;
+      } else {
+        console.log("[FacebookAutomator] Browser or page was closed. Reinitializing...");
+        this.context = null;
+        this.page = null;
+      }
     }
 
     if (!fs.existsSync(CHROME_PATH)) {
@@ -134,11 +250,29 @@ export class FacebookAutomator {
     return true;
   }
 
-  async scanGroup(groupId: string, maxPosts: number = 15): Promise<{ posts: FacebookPost[], groupName: string, iconUrl: string }> {
+  async scanGroup(groupId: string, maxPosts: number = 15, scrollDepth: number = 5): Promise<{ posts: FacebookPost[], groupName: string, iconUrl: string }> {
     if (!this.page) throw new Error("Not initialized");
 
     const groupUrl = `https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`;
     console.log(`[FacebookAutomator] Navigating to group: ${groupId}`);
+    
+    const interceptedPosts: FacebookPost[] = [];
+    
+    // Set up GraphQL network interceptor
+    const graphqlHandler = async (response: Response) => {
+      try {
+        if (response.url().includes('/api/graphql/') && response.request().method() === 'POST') {
+          const text = await response.text();
+          for (const json of parseGraphqlPayload(text)) {
+            deepExtractPosts(json, interceptedPosts, groupId);
+          }
+        }
+      } catch {
+        // Ignore parse errors silently
+      }
+    };
+    
+    this.page.on('response', graphqlHandler);
 
     try {
       // Navigate like a human would – click a link, wait for it to load
@@ -147,9 +281,46 @@ export class FacebookAutomator {
       // Human pause: "looking at the page loading" (speed up)
       await humanDelay(800, 1500);
 
-      // Remove annoying popups like "Log in" or "Cookies"
+      // Remove annoying popups, login walls, and cookie banners
       await this.page.evaluate(() => {
-        document.querySelectorAll('.x9f619.x1n2onr6.x1ja2u2z, [role="dialog"]').forEach(el => el.remove());
+        // 1. Remove dialogs
+        document.querySelectorAll('[role="dialog"]').forEach(el => el.remove());
+        
+        // 2. Click any visible close buttons or cookie accepts
+        document.querySelectorAll('[aria-label="Close"], [aria-label="Allow all cookies"], [aria-label="Decline optional cookies"]').forEach(btn => {
+          try { (btn as HTMLElement).click(); } catch {}
+        });
+
+        // 3. Find and destroy translucent fixed/absolute overlays (the "light layer")
+        document.querySelectorAll('div').forEach(el => {
+          const style = window.getComputedStyle(el);
+          if (style.position === 'fixed' || style.position === 'absolute') {
+            const bg = style.backgroundColor;
+            if (bg.startsWith('rgba(')) {
+              const parts = bg.replace('rgba(', '').replace(')', '').split(',');
+              if (parts.length === 4) {
+                const alpha = parseFloat(parts[3]);
+                // If it's semi-transparent (like Facebook's grey login backdrop), nuke it
+                if (alpha > 0 && alpha < 1) {
+                  el.remove();
+                }
+              }
+            }
+          }
+        });
+
+        // 4. Force restore scrolling (Facebook locks the scroll when the login wall appears)
+        document.body.style.setProperty('overflow', 'auto', 'important');
+        document.body.style.setProperty('position', 'static', 'important');
+        document.documentElement.style.setProperty('overflow', 'auto', 'important');
+        
+        // Also forcibly un-hide any hidden wrappers
+        document.querySelectorAll('div').forEach(w => {
+           if (window.getComputedStyle(w).overflow === 'hidden' && w.clientHeight > window.innerHeight * 0.8) {
+               w.style.setProperty('overflow', 'visible', 'important');
+               w.style.setProperty('overflow-y', 'auto', 'important');
+           }
+        });
       });
 
       // Move mouse as if orienting on the page
@@ -164,11 +335,16 @@ export class FacebookAutomator {
         const h1 = document.querySelector('h1');
         if (h1) name = h1.innerText.trim();
         
-        // Find image that looks like a group icon/cover
-        // Look for image with alt text matching the group name or containing 'cover'
-        const images = Array.from(document.querySelectorAll('img'));
-        const coverImg = images.find(img => img.getAttribute('alt')?.includes(name) || img.getAttribute('alt')?.toLowerCase().includes('cover'));
-        if (coverImg) icon = coverImg.getAttribute('src') || "";
+        // Find image by Facebook's specific profileCoverPhoto attribute
+        const exactCover = document.querySelector('img[data-imgperflogname="profileCoverPhoto"]');
+        if (exactCover) {
+          icon = exactCover.getAttribute('src') || "";
+        } else {
+          // Fallback to looking for images with alt matching the group name or containing 'cover'
+          const images = Array.from(document.querySelectorAll('img'));
+          const coverImg = images.find(img => img.getAttribute('alt')?.includes(name) || img.getAttribute('alt')?.toLowerCase().includes('cover'));
+          if (coverImg) icon = coverImg.getAttribute('src') || "";
+        }
         
         return { name, icon };
       });
@@ -183,26 +359,73 @@ export class FacebookAutomator {
         return { posts: [], groupName: groupInfo.name, iconUrl: groupInfo.icon };
       }
 
-      // Scroll like a human browsing through the feed (speed up)
-      // Do 2–3 scroll sessions with short pauses
-      const scrollSessions = randInt(2, 3);
+      // Scroll like a human browsing through the feed to trigger GraphQL requests
+      const scrollSessions = Math.max(2, Math.min(8, scrollDepth || 5));
       for (let i = 0; i < scrollSessions; i++) {
-        await humanScroll(this.page, randInt(1000, 2000));
-        // Pause like reading content (speed up)
+        await humanScroll(this.page, randInt(1200, 2400));
         await humanDelay(500, 1000);
-        // Occasional mouse movement
         if (Math.random() > 0.7) {
           await randomMouseMove(this.page);
         }
       }
 
-      // Small pause before extraction
-      await humanDelay(300, 800);
+      // Small pause to allow final GraphQL responses to arrive and be parsed
+      await humanDelay(1500, 2500);
 
-      // ─── Extract posts from the DOM ─────────────────────────────
-      const posts = await this.page.evaluate(({ groupId }: { groupId: string }) => {
+      console.log(`[FacebookAutomator] Intercepted ${interceptedPosts.length} posts via GraphQL for group ${groupId}`);
+
+      // ─── Extract posts from the DOM (Fallback Method) ─────────────────────────────
+      const domPosts = await this.page.evaluate(({ groupId }: { groupId: string }) => {
+        type ExtractedPost = {
+          postId: string;
+          url: string;
+          author: string;
+          content: string;
+          timestamp: string;
+          groupId: string;
+        };
+
+        const noise = new Set([
+          "all reactions:",
+          "comment",
+          "comments",
+          "follow",
+          "join group",
+          "like",
+          "more",
+          "reply",
+          "see less",
+          "see more",
+          "send",
+          "share",
+          "view more comments",
+        ]);
+
+        const cleanLine = (line: string) => line.replace(/\s+/g, " ").trim();
+        const isUsefulLine = (line: string) => {
+          const normalized = cleanLine(line).toLowerCase();
+          if (normalized.length < 4) return false;
+          if (noise.has(normalized)) return false;
+          if (/^\d+[dhms]$/.test(normalized)) return false;
+          if (/^\d+\s*(comments?|shares?)$/.test(normalized)) return false;
+          return true;
+        };
+
+        const hashContent = (value: string) => {
+          let hash = 0;
+          for (let i = 0; i < value.length; i++) {
+            hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+          }
+          return `hash_${Math.abs(hash)}`;
+        };
+
+        const absoluteFacebookUrl = (href: string) => {
+          const cleanHref = href.split("?")[0];
+          return cleanHref.startsWith("http") ? cleanHref : `https://www.facebook.com${cleanHref}`;
+        };
+
         const articles = Array.from(document.querySelectorAll('div[role="article"]'));
-        const results: any[] = [];
+        const results: ExtractedPost[] = [];
         const seenContent = new Set<string>();
 
         for (const el of articles) {
@@ -221,9 +444,8 @@ export class FacebookAutomator {
               const autoDivs = Array.from(el.querySelectorAll('div[dir="auto"]'));
               const parts: string[] = [];
               for (const div of autoDivs) {
-                const text = (div as HTMLElement).innerText.trim();
-                // Skip very short strings (likely UI labels like "Like", "Comment")
-                if (text.length > 3 && !parts.includes(text)) {
+                const text = cleanLine((div as HTMLElement).innerText || "");
+                if (isUsefulLine(text) && !parts.includes(text)) {
                   parts.push(text);
                 }
               }
@@ -233,21 +455,26 @@ export class FacebookAutomator {
             // Strategy 3: Fallback to entire article text minus known UI noise
             if (!content || content.length < 10) {
               const fullText = (el as HTMLElement).innerText || "";
-              // Take only first 500 chars to avoid grabbing comments
-              content = fullText.substring(0, 500).trim();
+              content = fullText
+                .split("\n")
+                .map(cleanLine)
+                .filter(isUsefulLine)
+                .slice(0, 12)
+                .join(" ")
+                .substring(0, 1000)
+                .trim();
             }
 
-            // Skip posts with no real content
             if (!content || content.length < 10) continue;
 
-            // Deduplicate by content fingerprint
             const fingerprint = content.substring(0, 80).toLowerCase();
             if (seenContent.has(fingerprint)) continue;
             seenContent.add(fingerprint);
 
             // ── URL & Timestamp extraction ──
             let url = "";
-            let timestamp = new Date().toISOString();
+            const timestamp = new Date().toISOString();
+
             const allLinks = Array.from(el.querySelectorAll("a[href]"));
 
             // Look for permalink-style links
@@ -262,7 +489,7 @@ export class FacebookAutomator {
 
             if (postLink) {
               const rawHref = postLink.getAttribute("href") || "";
-              url = rawHref.startsWith("http") ? rawHref.split("?")[0] : `https://www.facebook.com${rawHref.split("?")[0]}`;
+              url = absoluteFacebookUrl(rawHref);
             }
 
             // ── Post ID extraction ──
@@ -274,13 +501,7 @@ export class FacebookAutomator {
             } else if (storyMatch) {
               postId = storyMatch[1];
             } else {
-              // Generate a deterministic hash from content
-              let hash = 0;
-              for (let i = 0; i < content.length; i++) {
-                const char = content.charCodeAt(i);
-                hash = ((hash << 5) - hash + char) | 0;
-              }
-              postId = `hash_${Math.abs(hash)}`;
+              postId = hashContent(`${groupId}:${content}`);
             }
 
             // ── Author extraction ──
@@ -329,10 +550,25 @@ export class FacebookAutomator {
         return results;
       }, { groupId });
 
-      console.log(`[FacebookAutomator] Extracted ${posts.length} posts from group ${groupId}`);
-      return { posts: posts.slice(0, maxPosts), groupName: groupInfo.name, iconUrl: groupInfo.icon };
+      // Clean up GraphQL listener so it doesn't leak
+      this.page.off('response', graphqlHandler);
+
+      // Merge intercepted posts and dom posts, giving priority to intercepted ones
+      const allPosts = [...interceptedPosts];
+      for (const domPost of domPosts as DomPost[]) {
+        if (!allPosts.find(p => p.postId === domPost.postId || p.content === domPost.content)) {
+          allPosts.push(domPost);
+        }
+      }
+
+      console.log(`[FacebookAutomator] Extracted ${allPosts.length} posts from group ${groupId}`);
+      return { posts: allPosts.slice(0, maxPosts), groupName: groupInfo.name, iconUrl: groupInfo.icon };
     } catch (error) {
       console.error(`[FacebookAutomator] Error scanning group ${groupId}:`, error);
+      // Ensure listener is cleaned up even on error
+      if (this.page) {
+        try { this.page.off('response', graphqlHandler); } catch {}
+      }
       return { posts: [], groupName: "", iconUrl: "" };
     }
   }

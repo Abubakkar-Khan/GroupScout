@@ -1,9 +1,10 @@
 
-import { PrismaClient } from "@prisma/client";
+import type { Keyword, MonitoredGroup, Settings, User } from "@prisma/client";
 import { FacebookAutomator, FacebookPost } from "./facebook";
 import { getGroqClient, classifyPost } from "./groq";
+import { prisma } from "./db";
+import { findBestKeywordMatch } from "./lead-matching";
 
-const prisma = new PrismaClient();
 const automator = new FacebookAutomator();
 let isRunning = false;
 
@@ -15,16 +16,18 @@ function engineDelay(minMs: number, maxMs: number): Promise<void> {
 
 async function processPostsInBackground(
   posts: FacebookPost[],
-  user: any,
-  keywords: any[],
-  settings: any,
-  groups: any[]
-) {
-  const kwStrings = keywords.map((k) => k.keyword.toLowerCase());
+  user: Pick<User, "id">,
+  keywords: Pick<Keyword, "keyword">[],
+  settings: Settings,
+  groups: Pick<MonitoredGroup, "id" | "facebookGroupId">[]
+): Promise<{ matchCount: number; savedCount: number }> {
   let matchCount = 0;
   let savedCount = 0;
 
   for (const post of posts) {
+    const trimmedContent = post.content.trim();
+    if (!trimmedContent) continue;
+
     // Skip duplicates
     const existing = await prisma.post.findFirst({
       where: { facebookPostId: post.postId, userId: user.id },
@@ -32,19 +35,18 @@ async function processPostsInBackground(
     if (existing) continue;
 
     // Keyword matching
-    const contentLower = post.content.toLowerCase();
-    const matchedKeyword = kwStrings.find((kw) => contentLower.includes(kw));
-    if (!matchedKeyword) continue;
+    const matched = findBestKeywordMatch(trimmedContent, keywords);
+    if (!matched) continue;
 
     matchCount++;
-    console.log(`[Engine] ⚡ Keyword "${matchedKeyword}" matched in post ${post.postId.substring(0, 12)}...`);
+    console.log(`[Engine] Keyword "${matched.keyword}" matched in post ${post.postId.substring(0, 12)}...`);
 
     // Groq classification
     let isRelevant = false;
     if (settings.useGroq && settings.groqApiKey) {
       try {
         const groq = getGroqClient(settings.groqApiKey);
-        isRelevant = await classifyPost(groq, matchedKeyword, post.content, settings.groqSystemPrompt);
+        isRelevant = await classifyPost(groq, matched.keyword, trimmedContent, settings.groqSystemPrompt);
         // Small delay between API calls to respect rate limits
         await engineDelay(500, 1500);
       } catch (error) {
@@ -55,7 +57,7 @@ async function processPostsInBackground(
       isRelevant = true; // No Groq = all keyword matches are leads
     }
 
-    console.log(`[Engine] Post ${post.postId.substring(0, 12)}... → ${isRelevant ? "✅ LEAD" : "❌ Ignored"}`);
+    console.log(`[Engine] Post ${post.postId.substring(0, 12)}... -> ${isRelevant ? "LEAD" : "Ignored"}`);
 
     // Save to database
     const groupDb = groups.find((g) => g.facebookGroupId === post.groupId);
@@ -65,8 +67,8 @@ async function processPostsInBackground(
           userId: user.id,
           facebookPostId: post.postId,
           groupId: groupDb.id,
-          keyword: matchedKeyword,
-          content: post.content,
+          keyword: matched.keyword,
+          content: trimmedContent,
           url: post.url,
           relevant: isRelevant,
           viewed: false,
@@ -79,6 +81,8 @@ async function processPostsInBackground(
   if (posts.length > 0) {
     console.log(`[Engine] Background processing complete for ${posts[0].groupId}. ${matchCount} matched, ${savedCount} saved.`);
   }
+
+  return { matchCount, savedCount };
 }
 
 async function runScan() {
@@ -88,7 +92,7 @@ async function runScan() {
   }
 
   isRunning = true;
-  console.log(`\n━━━ [Engine] Starting scan at ${new Date().toLocaleTimeString()} ━━━`);
+  console.log(`\n--- [Engine] Starting scan at ${new Date().toLocaleTimeString()} ---`);
 
   try {
     // 1. Fetch user data
@@ -124,46 +128,76 @@ async function runScan() {
       const [h, m] = t.split(":").map(Number);
       return h * 60 + m;
     };
-    const startTime = parseTime(settings.activeFrom);
-    const endTime = parseTime(settings.activeTo);
+    const startTime = parseTime(settings.activeFrom || "00:00");
+    const endTime = parseTime(settings.activeTo || "23:59");
+    const insideWindow =
+      startTime <= endTime
+        ? currentMinutes >= startTime && currentMinutes <= endTime
+        : currentMinutes >= startTime || currentMinutes <= endTime;
 
-    if (currentMinutes < startTime || currentMinutes > endTime) {
-      console.log(`[Engine] Outside active hours (${settings.activeFrom}–${settings.activeTo}). Sleeping.`);
+    if (!insideWindow) {
+      console.log(`[Engine] Outside active hours (${settings.activeFrom}-${settings.activeTo}). Sleeping.`);
       await automator.close();
       return;
     }
 
     // 3. Launch browser (reuses session if already open)
     await automator.init();
+    const loggedIn = await automator.checkLogin();
+    if (!loggedIn) {
+      console.log("[Engine] Facebook login is required before scanning can continue.");
+      return;
+    }
 
     // 4. Scan each group with human-like pauses between them
     let totalPostsScraped = 0;
+    let totalPostsSaved = 0;
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
       console.log(`[Engine] Scanning group ${i + 1}/${groups.length}: ${group.name || group.facebookGroupId}`);
 
-      const { posts, groupName, iconUrl } = await automator.scanGroup(group.facebookGroupId, 15);
+      const maxPosts = Math.max(15, Math.min(75, settings.autoScrollPages * 10));
+      const { posts, groupName, iconUrl } = await automator.scanGroup(
+        group.facebookGroupId,
+        maxPosts,
+        settings.autoScrollPages
+      );
       totalPostsScraped += posts.length;
 
       // Update group stats
-      await prisma.monitoredGroup.update({
-        where: { id: group.id },
-        data: {
-          lastScan: new Date(),
-          postsScanned: { increment: posts.length },
-          // Update name and icon if they were found (unless they are empty)
-          ...(groupName ? { name: groupName } : {}),
-          ...(iconUrl ? { iconUrl } : {})
-        },
-      });
+      const updateData: any = {
+        lastScan: new Date(),
+        postsScanned: { increment: posts.length },
+        ...(groupName ? { name: groupName } : {})
+      };
+      
+      try {
+        // Try to update with iconUrl first
+        await prisma.monitoredGroup.update({
+          where: { id: group.id },
+          data: {
+            ...updateData,
+            ...(iconUrl ? { iconUrl } : {})
+          },
+        });
+      } catch (prismaError: any) {
+        // If Prisma client is outdated (hasn't been regenerated) and doesn't know about iconUrl yet,
+        // fallback to updating without it to prevent the engine from crashing.
+        if (prismaError.message && prismaError.message.includes('iconUrl')) {
+          console.warn(`[Engine] Skipped saving iconUrl for ${group.id} because Prisma client is outdated. Please run 'npx prisma generate' and restart your Next.js server.`);
+          await prisma.monitoredGroup.update({
+            where: { id: group.id },
+            data: updateData,
+          });
+        } else {
+          throw prismaError;
+        }
+      }
 
-      // ──🚀 START BACKGROUND PROCESSING FOR THIS GROUP ──
-      // We don't await this so the browser can immediately pause or move to the next group!
       if (posts.length > 0) {
-        processPostsInBackground(posts, user, keywords, settings, groups).catch((err) => 
-          console.error(`[Engine] Background processing error for ${group.facebookGroupId}:`, err)
-        );
+        const result = await processPostsInBackground(posts, user, keywords, settings, groups);
+        totalPostsSaved += result.savedCount;
       }
 
       // Human-like pause between groups (5s–12s) to avoid rapid navigation patterns, but fast enough
@@ -174,11 +208,10 @@ async function runScan() {
       }
     }
 
-    console.log(`━━━ [Engine] Scraping complete. ${totalPostsScraped} total posts scraped. Chrome remains open. ━━━\n`);
+    console.log(`--- [Engine] Scraping complete. ${totalPostsScraped} posts scraped, ${totalPostsSaved} posts saved. Chrome remains open. ---\n`);
 
   } catch (error) {
-    console.error("[Engine] Fatal error during scan:", error);
-    try { await automator.close(); } catch { /* ignore */ }
+    console.error("[Engine] Error during scan (Chrome will stay open):", error);
   } finally {
     isRunning = false;
   }
@@ -186,7 +219,10 @@ async function runScan() {
 
 // ─── Engine Control (globalThis survives Next.js HMR) ─────────────────
 
-const globalAny: any = global;
+const globalAny = globalThis as typeof globalThis & {
+  engineInterval?: ReturnType<typeof setInterval> | null;
+  lastRunTimestamp?: number;
+};
 
 export function startEngine() {
   if (globalAny.engineInterval) {
@@ -194,7 +230,7 @@ export function startEngine() {
     return { status: "running" };
   }
 
-  console.log("[Engine] ▶ Started.");
+  console.log("[Engine] Started.");
   globalAny.lastRunTimestamp = Date.now();
 
   // Run the first scan immediately
@@ -214,8 +250,8 @@ export function startEngine() {
         globalAny.lastRunTimestamp = now;
         await runScan();
       }
-    } catch (e) {
-      console.error("[Engine] Interval check error:", e);
+    } catch (error) {
+      console.error("[Engine] Interval check error:", error);
     }
   }, 60000);
 
@@ -226,7 +262,7 @@ export function stopEngine() {
   if (globalAny.engineInterval) {
     clearInterval(globalAny.engineInterval);
     globalAny.engineInterval = null;
-    console.log("[Engine] ⏹ Stopped.");
+    console.log("[Engine] Stopped.");
   }
   // Also close the browser if it's still open
   automator.close().catch(() => {});

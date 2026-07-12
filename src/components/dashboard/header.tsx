@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
 export function Header() {
   const [user, setUser] = useState<{name: string, email: string} | null>(null)

@@ -10,8 +10,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { Save, Key } from "lucide-react"
 
+type SettingsForm = {
+  userId: string
+  scanInterval: string
+  autoScrollPages: string
+  activeFrom: string
+  activeTo: string
+  monitoringMode: string
+  groqApiKey: string
+  useGroq: boolean
+  groqSystemPrompt: string
+}
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<SettingsForm>({
     userId: "",
     scanInterval: "5",
     autoScrollPages: "5",
@@ -57,10 +69,7 @@ export default function SettingsPage() {
     setSaving(true)
     
     // Only send the key if it was modified (not the mask)
-    const payload = { ...settings }
-    if (payload.groqApiKey === "********") {
-      delete (payload as any).groqApiKey
-    }
+    const groqApiKey = settings.groqApiKey === "********" ? undefined : settings.groqApiKey
 
     try {
       const res = await fetch("/api/settings", {
@@ -71,20 +80,20 @@ export default function SettingsPage() {
           activeFrom: settings.activeFrom,
           activeTo: settings.activeTo,
           monitoringMode: settings.monitoringMode,
-          groqApiKey: payload.groqApiKey,
+          groqApiKey,
           useGroq: settings.useGroq,
           groqSystemPrompt: settings.groqSystemPrompt
         })
       })
       if (res.ok) {
         toast.success("Settings saved successfully")
-        if (payload.groqApiKey) {
+        if (groqApiKey) {
           setSettings({ ...settings, groqApiKey: "********" })
         }
       } else {
         toast.error("Failed to save settings")
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred")
     } finally {
       setSaving(false)
@@ -222,7 +231,7 @@ export default function SettingsPage() {
                     />
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Customize how Groq evaluates posts. The AI must return JSON: {"{"}"relevant": true/false{"}"}
+                    Customize how Groq evaluates posts. The AI must return JSON with a relevant boolean.
                   </p>
                 </div>
               )}

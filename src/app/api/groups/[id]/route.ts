@@ -15,12 +15,15 @@ export async function PATCH(
     const body = await request.json()
     const { enabled } = body
 
-    const group = await prisma.monitoredGroup.update({
+    const group = await prisma.monitoredGroup.updateMany({
       where: { id, userId: session.user.id },
       data: { enabled },
     })
-    return NextResponse.json(group)
-  } catch (error) {
+    if (group.count === 0) return NextResponse.json({ error: "Group not found" }, { status: 404 })
+
+    const updated = await prisma.monitoredGroup.findUnique({ where: { id } })
+    return NextResponse.json(updated)
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -34,11 +37,12 @@ export async function DELETE(
 
   try {
     const { id } = await params
-    await prisma.monitoredGroup.delete({
-      where: { id, userId: session.user.id },
-    })
+    const group = await prisma.monitoredGroup.findFirst({ where: { id, userId: session.user.id } })
+    if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 })
+
+    await prisma.monitoredGroup.delete({ where: { id } })
     return new NextResponse(null, { status: 204 })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

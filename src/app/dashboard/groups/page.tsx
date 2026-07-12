@@ -32,15 +32,18 @@ export default function GroupsPage() {
     try {
       const res = await fetch("/api/groups")
       if (res.ok) setGroups(await res.json())
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchGroups()
+    const timeout = window.setTimeout(() => {
+      void fetchGroups()
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [])
 
   const toggleGroup = async (id: string, enabled: boolean) => {
@@ -51,7 +54,7 @@ export default function GroupsPage() {
         body: JSON.stringify({ enabled })
       })
       toast.success(enabled ? "Group monitoring enabled" : "Group monitoring disabled")
-    } catch (e) {
+    } catch {
       toast.error("Failed to update group")
       fetchGroups()
     }
@@ -62,7 +65,7 @@ export default function GroupsPage() {
     try {
       await fetch(`/api/groups/${id}`, { method: "DELETE" })
       toast.success("Group removed")
-    } catch (e) {
+    } catch {
       toast.error("Failed to remove group")
       fetchGroups()
     }
@@ -87,7 +90,7 @@ export default function GroupsPage() {
       } else {
         toast.error(data.error || "Failed to add group")
       }
-    } catch (error) {
+    } catch {
       toast.error("An error occurred")
     } finally {
       setAdding(false)

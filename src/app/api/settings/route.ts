@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
+import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/db"
 import { encrypt } from "@/lib/encryption"
@@ -30,7 +31,7 @@ export async function GET() {
       useGroq: settings.useGroq,
       groqSystemPrompt: settings.groqSystemPrompt,
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -43,28 +44,42 @@ export async function PATCH(request: Request) {
     const body = await request.json()
     const { scanInterval, autoScrollPages, activeFrom, activeTo, monitoringMode, groqApiKey, useGroq, groqSystemPrompt } = body
 
-    const updateData: any = {
+    const settingsData = {
       scanInterval: isNaN(scanInterval) || scanInterval === null ? 5 : scanInterval,
       autoScrollPages: isNaN(autoScrollPages) || autoScrollPages === null ? 5 : autoScrollPages,
       activeFrom: activeFrom || "08:00",
       activeTo: activeTo || "20:00",
       monitoringMode: monitoringMode || "default",
+    } satisfies Pick<
+      Prisma.SettingsUncheckedCreateInput,
+      "scanInterval" | "autoScrollPages" | "activeFrom" | "activeTo" | "monitoringMode"
+    >
+
+    const updateData: Prisma.SettingsUncheckedUpdateInput = { ...settingsData }
+    const createData: Prisma.SettingsUncheckedCreateInput = {
+      userId: session.user.id,
+      ...settingsData,
     }
     
-    if (useGroq !== undefined) updateData.useGroq = useGroq
-    if (groqSystemPrompt) updateData.groqSystemPrompt = groqSystemPrompt
+    if (useGroq !== undefined) {
+      updateData.useGroq = useGroq
+      createData.useGroq = useGroq
+    }
+    if (groqSystemPrompt) {
+      updateData.groqSystemPrompt = groqSystemPrompt
+      createData.groqSystemPrompt = groqSystemPrompt
+    }
 
     if (groqApiKey) {
-      updateData.groqApiKey = encrypt(groqApiKey)
+      const encryptedApiKey = encrypt(groqApiKey)
+      updateData.groqApiKey = encryptedApiKey
+      createData.groqApiKey = encryptedApiKey
     }
 
     const settings = await prisma.settings.upsert({
       where: { userId: session.user.id },
       update: updateData,
-      create: {
-        userId: session.user.id,
-        ...updateData,
-      },
+      create: createData,
     })
 
     return NextResponse.json({

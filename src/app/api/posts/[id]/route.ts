@@ -15,12 +15,15 @@ export async function PATCH(
     const body = await request.json()
     const { viewed } = body
 
-    const post = await prisma.post.update({
+    const post = await prisma.post.updateMany({
       where: { id, userId: session.user.id },
       data: { viewed },
     })
-    return NextResponse.json(post)
-  } catch (error) {
+    if (post.count === 0) return NextResponse.json({ error: "Post not found" }, { status: 404 })
+
+    const updated = await prisma.post.findUnique({ where: { id } })
+    return NextResponse.json(updated)
+  } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

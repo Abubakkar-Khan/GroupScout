@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { classifyPost, getGroqClient } from "@/lib/groq"
-import { encrypt, decrypt } from "@/lib/encryption"
 import { getSession } from "@/lib/auth"
+import { findBestKeywordMatch } from "@/lib/lead-matching"
 
 function getCorsHeaders(request: Request) {
   return {
@@ -30,14 +30,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: getCorsHeaders(request) })
     }
 
-    // Upsert the group
-    const group = await prisma.monitoredGroup.upsert({
-      where: { userId_facebookGroupId: { userId, facebookGroupId: groupId } },
-      update: { 
-        lastScan: new Date(),
-        ...(groupName && groupName !== "Unknown Group" ? { name: groupName } : {})
-      },
-      create: {
+    const existingGroup = await prisma.monitoredGroup.findFirst({
+      where: { userId, facebookGroupId: groupId },
+    })
+
+    const group = existingGroup
+      ? await prisma.monitoredGroup.update({
+        where: { id: existingGroup.id },
+        data: {
+          lastScan: new Date(),
+          ...(groupName && groupName !== "Unknown Group" ? { name: groupName } : {})
+        },
+      })
+      : await prisma.monitoredGroup.create({
+      data: {
         userId,
         facebookGroupId: groupId,
         name: groupName || "Unknown Group",
@@ -57,19 +63,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Already processed" }, { headers: getCorsHeaders(request) })
     }
 
+    const keywords = await prisma.keyword.findMany({
+      where: { userId, enabled: true },
+      select: { keyword: true },
+    })
+    const matched = keyword
+      ? { keyword: String(keyword), score: 100 }
+      : findBestKeywordMatch(content, keywords)
+
+    if (!matched) {
+      return NextResponse.json({ message: "No keyword match" }, { headers: getCorsHeaders(request) })
+    }
+
     // Classify using Groq OR bypass if AI is disabled
     const settings = await prisma.settings.findUnique({ where: { userId } })
     
-    let isRelevant = true; // Default to true if AI is disabled
+    let isRelevant = true; // Default to true if AI is disabled or not configured
     
-    if (settings?.useGroq) {
-      if (!settings?.groqApiKey) {
-        return NextResponse.json({ error: "Groq API key not configured" }, { status: 400, headers: getCorsHeaders(request) })
-      }
+    if (settings?.useGroq && settings.groqApiKey) {
       const groq = getGroqClient(settings.groqApiKey)
       isRelevant = await classifyPost(
         groq, 
-        keyword || "Unknown", 
+        matched.keyword,
         content, 
         settings.groqSystemPrompt || ""
       )
@@ -81,7 +96,7 @@ export async function POST(request: Request) {
         userId,
         facebookPostId: postId,
         groupId: group.id,
-        keyword: keyword || "Unknown",
+        keyword: matched.keyword,
         content,
         url: url || `https://facebook.com/groups/${groupId}/posts/${postId}`,
         relevant: isRelevant

@@ -23,7 +23,7 @@ export default function SignupPage() {
     e.preventDefault()
     setLoading(true)
 
-    const { data, error } = await authClient.signUp.email({
+    const { error } = await authClient.signUp.email({
       name,
       email,
       password

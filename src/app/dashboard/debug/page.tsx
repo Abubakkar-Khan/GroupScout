@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { formatDistanceToNow } from "date-fns"
 import { RefreshCw, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -26,28 +25,23 @@ export default function DebugPage() {
       if (res.ok) {
         setLogs(await res.json())
       }
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchLogs()
+    const timeout = window.setTimeout(() => {
+      void fetchLogs()
+    }, 0)
     const interval = setInterval(fetchLogs, 10000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const getBadgeVariant = (type: string) => {
-    switch (type) {
-      case "ERROR": return "destructive"
-      case "WARN": return "warning"
-      case "SUCCESS": return "default"
-      case "STATE_SYNC": return "secondary"
-      default: return "outline"
+    return () => {
+      window.clearTimeout(timeout)
+      clearInterval(interval)
     }
-  }
+  }, [])
 
   const getBadgeColor = (type: string) => {
     switch (type) {

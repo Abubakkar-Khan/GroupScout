@@ -6,8 +6,24 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Activity, Bug, ExternalLink } from "lucide-react"
 
+interface ParserPost {
+  author?: string
+  postId?: string
+  timestamp?: string
+  url?: string
+  content?: string
+}
+
+interface ParserResult {
+  timestamp: number
+  url?: string
+  groupName?: string
+  groupId?: string
+  posts?: ParserPost[]
+}
+
 export default function ParserTestPage() {
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<ParserResult | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchResults = async () => {
@@ -25,9 +41,14 @@ export default function ParserTestPage() {
   }
 
   useEffect(() => {
-    fetchResults()
+    const timeout = window.setTimeout(() => {
+      void fetchResults()
+    }, 0)
     const interval = setInterval(fetchResults, 2000)
-    return () => clearInterval(interval)
+    return () => {
+      window.clearTimeout(timeout)
+      clearInterval(interval)
+    }
   }, [])
 
   return (
@@ -76,7 +97,7 @@ export default function ParserTestPage() {
             {result && <Badge className="ml-2">{result.posts?.length || 0} Found</Badge>}
           </CardTitle>
           <CardDescription>
-            To run a new test, go to a Facebook group, click the GroupScout extension icon, and click "Run Parser Test".
+            To run a new test, go to a Facebook group, click the GroupScout extension icon, and click Run Parser Test.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -97,7 +118,7 @@ export default function ParserTestPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {result.posts.map((post: any, i: number) => (
+              {(result.posts ?? []).map((post, i) => (
                 <div key={i} className="border border-border/50 rounded-lg p-4 bg-background/50 text-sm">
                   <div className="flex justify-between items-start mb-3 border-b border-border/50 pb-3">
                     <div>
