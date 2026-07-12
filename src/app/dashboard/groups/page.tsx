@@ -9,11 +9,13 @@ import { Switch } from "@/components/ui/switch"
 import { Users, Trash2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 interface Group {
   id: string
   facebookGroupId: string
   name: string
+  iconUrl?: string | null
   enabled: boolean
   lastScan: string | null
   postsScanned: number
@@ -155,9 +157,15 @@ export default function GroupsPage() {
               groups.map((group) => (
                 <Card key={group.id} className="border-border/50 flex flex-col">
                   <CardContent className="p-6 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start mb-2 gap-4">
-                      <h3 className="font-medium truncate" title={group.name}>{group.name}</h3>
-                      <Badge variant={group.enabled ? "default" : "secondary"}>
+                    <div className="flex justify-between items-start mb-4 gap-4">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <Avatar className="size-10 rounded-md border border-border/50 bg-muted shrink-0">
+                          <AvatarImage src={group.iconUrl || ""} alt={group.name} className="object-cover" />
+                          <AvatarFallback className="rounded-md">{group.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <h3 className="font-semibold text-sm leading-tight line-clamp-2" title={group.name}>{group.name}</h3>
+                      </div>
+                      <Badge variant={group.enabled ? "default" : "secondary"} className="shrink-0">
                         {group.enabled ? "Active" : "Paused"}
                       </Badge>
                     </div>

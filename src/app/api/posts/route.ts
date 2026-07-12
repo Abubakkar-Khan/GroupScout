@@ -10,10 +10,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const limit = parseInt(searchParams.get("limit") || "50")
   const relevantParam = searchParams.get("relevant")
+  const viewedParam = searchParams.get("viewed")
   
   let whereClause: any = { userId: session.user.id }
   if (relevantParam === "true") whereClause.relevant = true
   if (relevantParam === "false") whereClause.relevant = false
+  if (viewedParam === "true") whereClause.viewed = true
+  if (viewedParam === "false") whereClause.viewed = false
 
   try {
     const posts = await prisma.post.findMany({

@@ -12,7 +12,7 @@ export async function GET() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const [keywordMatchesToday, leadsToday, totalLeads, latestSync] = await Promise.all([
+    const [keywordMatchesToday, leadsToday, totalLeads, latestSync, totalScrapedAgg] = await Promise.all([
       // Total raw posts collected today (both relevant and non-relevant)
       prisma.post.count({
         where: {
@@ -42,6 +42,11 @@ export async function GET() {
           type: "STATE_SYNC"
         },
         orderBy: { createdAt: 'desc' }
+      }),
+      // Total posts scraped
+      prisma.monitoredGroup.aggregate({
+        where: { userId: session.user.id },
+        _sum: { postsScanned: true }
       })
     ])
 
@@ -54,6 +59,7 @@ export async function GET() {
       keywordMatchesToday,
       leadsToday,
       totalLeads,
+      totalScraped: totalScrapedAgg._sum.postsScanned || 0,
       extensionState: isConnected ? extensionState : null
     })
   } catch (error) {

@@ -94,6 +94,7 @@ model MonitoredGroup {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   facebookGroupId String
   name            String
+  iconUrl         String?
   enabled         Boolean  @default(true)
   lastScan        DateTime?
   postsScanned    Int      @default(0)

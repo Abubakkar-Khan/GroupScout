@@ -134,7 +134,7 @@ export class FacebookAutomator {
     return true;
   }
 
-  async scanGroup(groupId: string, maxPosts: number = 15): Promise<FacebookPost[]> {
+  async scanGroup(groupId: string, maxPosts: number = 15): Promise<{ posts: FacebookPost[], groupName: string, iconUrl: string }> {
     if (!this.page) throw new Error("Not initialized");
 
     const groupUrl = `https://www.facebook.com/groups/${groupId}?sorting_setting=CHRONOLOGICAL`;
@@ -144,11 +144,34 @@ export class FacebookAutomator {
       // Navigate like a human would – click a link, wait for it to load
       await this.page.goto(groupUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
 
-      // Human pause: "looking at the page loading"
-      await humanDelay(2000, 4000);
+      // Human pause: "looking at the page loading" (speed up)
+      await humanDelay(800, 1500);
+
+      // Remove annoying popups like "Log in" or "Cookies"
+      await this.page.evaluate(() => {
+        document.querySelectorAll('.x9f619.x1n2onr6.x1ja2u2z, [role="dialog"]').forEach(el => el.remove());
+      });
 
       // Move mouse as if orienting on the page
       await randomMouseMove(this.page);
+
+      // Extract group header info (Name & Icon)
+      const groupInfo = await this.page.evaluate(() => {
+        let name = "";
+        let icon = "";
+        
+        // Find H1 for group name
+        const h1 = document.querySelector('h1');
+        if (h1) name = h1.innerText.trim();
+        
+        // Find image that looks like a group icon/cover
+        // Look for image with alt text matching the group name or containing 'cover'
+        const images = Array.from(document.querySelectorAll('img'));
+        const coverImg = images.find(img => img.getAttribute('alt')?.includes(name) || img.getAttribute('alt')?.toLowerCase().includes('cover'));
+        if (coverImg) icon = coverImg.getAttribute('src') || "";
+        
+        return { name, icon };
+      });
 
       // Wait for at least one post to appear
       const feedLoaded = await this.page
@@ -157,24 +180,24 @@ export class FacebookAutomator {
 
       if (!feedLoaded) {
         console.log(`[FacebookAutomator] No feed found for group ${groupId}. Might be private or empty.`);
-        return [];
+        return { posts: [], groupName: groupInfo.name, iconUrl: groupInfo.icon };
       }
 
-      // Scroll like a human browsing through the feed
-      // Do 3–5 scroll sessions with pauses in between
-      const scrollSessions = randInt(3, 5);
+      // Scroll like a human browsing through the feed (speed up)
+      // Do 2–3 scroll sessions with short pauses
+      const scrollSessions = randInt(2, 3);
       for (let i = 0; i < scrollSessions; i++) {
-        await humanScroll(this.page, randInt(1200, 2500));
-        // Pause like reading content
-        await humanDelay(1500, 3500);
+        await humanScroll(this.page, randInt(1000, 2000));
+        // Pause like reading content (speed up)
+        await humanDelay(500, 1000);
         // Occasional mouse movement
-        if (Math.random() > 0.5) {
+        if (Math.random() > 0.7) {
           await randomMouseMove(this.page);
         }
       }
 
       // Small pause before extraction
-      await humanDelay(1000, 2000);
+      await humanDelay(300, 800);
 
       // ─── Extract posts from the DOM ─────────────────────────────
       const posts = await this.page.evaluate(({ groupId }: { groupId: string }) => {
@@ -307,10 +330,10 @@ export class FacebookAutomator {
       }, { groupId });
 
       console.log(`[FacebookAutomator] Extracted ${posts.length} posts from group ${groupId}`);
-      return posts.slice(0, maxPosts);
+      return { posts: posts.slice(0, maxPosts), groupName: groupInfo.name, iconUrl: groupInfo.icon };
     } catch (error) {
       console.error(`[FacebookAutomator] Error scanning group ${groupId}:`, error);
-      return [];
+      return { posts: [], groupName: "", iconUrl: "" };
     }
   }
 
