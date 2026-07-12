@@ -57,14 +57,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Already processed" }, { headers: getCorsHeaders(request) })
     }
 
-    // Classify using Groq
+    // Classify using Groq OR bypass if AI is disabled
     const settings = await prisma.settings.findUnique({ where: { userId } })
-    if (!settings?.groqApiKey) {
-      return NextResponse.json({ error: "Groq API key not configured" }, { status: 400, headers: getCorsHeaders(request) })
+    
+    let isRelevant = true; // Default to true if AI is disabled
+    
+    if (settings?.useGroq) {
+      if (!settings?.groqApiKey) {
+        return NextResponse.json({ error: "Groq API key not configured" }, { status: 400, headers: getCorsHeaders(request) })
+      }
+      const groq = getGroqClient(settings.groqApiKey)
+      isRelevant = await classifyPost(
+        groq, 
+        keyword || "Unknown", 
+        content, 
+        settings.groqSystemPrompt || ""
+      )
     }
-
-    const groq = getGroqClient(settings.groqApiKey)
-    const isRelevant = await classifyPost(groq, keyword || "Unknown", content)
 
     // Save ALL posts (for the live dashboard feed), mark relevance
     await prisma.post.create({

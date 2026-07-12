@@ -8,11 +8,30 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
     const groups = await prisma.monitoredGroup.findMany({
       where: { userId: session.user.id },
       orderBy: { name: "asc" },
+      include: {
+        _count: {
+          select: {
+            posts: {
+              where: { createdAt: { gte: today } }
+            }
+          }
+        }
+      }
     })
-    return NextResponse.json(groups)
+    
+    // Map to flat structure for frontend
+    const formattedGroups = groups.map(g => ({
+      ...g,
+      newPostsToday: g._count.posts
+    }))
+    
+    return NextResponse.json(formattedGroups)
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { authClient } from "@/lib/auth-client"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,15 +22,13 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
+    const { data, error } = await authClient.signIn.email({
+      email,
+      password
     })
 
-    if (!res.ok) {
-      const data = await res.json()
-      toast.error(data.error || "Failed to sign in")
+    if (error) {
+      toast.error(error.message || "Failed to sign in")
       setLoading(false)
       return
     }

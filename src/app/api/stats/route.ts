@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 
 import { prisma } from "@/lib/db"
+import { getEngineStatus } from "@/lib/engine"
 
 export async function GET() {
   const session = await getSession()
@@ -11,20 +12,49 @@ export async function GET() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const [totalLeads, leadsToday] = await Promise.all([
-      prisma.post.count({ where: { userId: session.user.id } }),
+    const [keywordMatchesToday, leadsToday, totalLeads, latestSync] = await Promise.all([
+      // Total raw posts collected today (both relevant and non-relevant)
       prisma.post.count({
         where: {
           userId: session.user.id,
           createdAt: { gte: today },
         },
       }),
+      // Only relevant posts collected today
+      prisma.post.count({
+        where: {
+          userId: session.user.id,
+          relevant: true,
+          createdAt: { gte: today },
+        },
+      }),
+      // All-time relevant posts
+      prisma.post.count({ 
+        where: { 
+          userId: session.user.id,
+          relevant: true 
+        } 
+      }),
+      // Latest extension state sync
+      prisma.logEvent.findFirst({
+        where: {
+          userId: session.user.id,
+          type: "STATE_SYNC"
+        },
+        orderBy: { createdAt: 'desc' }
+      })
     ])
 
+    // Check if the extension synced within the last 60 seconds
+    const isConnected = latestSync && (new Date().getTime() - new Date(latestSync.createdAt).getTime()) < 60000;
+    const extensionState = latestSync && latestSync.metadata ? JSON.parse(latestSync.metadata) : null;
+
     return NextResponse.json({
-      status: "Active", // In a real app, this could check the last extension ping
-      totalLeads,
+      status: getEngineStatus() === "running" ? "Active" : "Offline",
+      keywordMatchesToday,
       leadsToday,
+      totalLeads,
+      extensionState: isConnected ? extensionState : null
     })
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

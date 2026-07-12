@@ -25,7 +25,7 @@ interface Lead {
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [activity, setActivity] = useState<Lead[]>([])
-  const [stats, setStats] = useState({ leadsToday: 0, totalLeads: 0, status: "Active" })
+  const [stats, setStats] = useState({ leadsToday: 0, totalLeads: 0, keywordMatchesToday: 0, status: "Active" })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -53,48 +53,82 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-        <p className="text-muted-foreground mt-1">Monitor your high-intent Facebook Group leads.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
+          <p className="text-muted-foreground mt-1">Monitor your high-intent Facebook Group leads.</p>
+        </div>
+        
+        <div className="flex items-center gap-6 bg-card/50 backdrop-blur-sm border border-border/50 px-5 py-3 rounded-xl shadow-sm">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1">Engine Status</span>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                {stats.status === "Active" ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-muted"></span>
+                )}
+              </span>
+              <span className="text-sm font-bold">
+                {stats.status === "Active" ? "Connected" : "Offline / Paused"}
+              </span>
+            </div>
+          </div>
+          
+          <div className="h-8 w-px bg-border/50"></div>
+          
+          <Button 
+            variant={stats.status === "Active" ? "destructive" : "default"} 
+            size="sm"
+            onClick={async () => {
+              const action = stats.status === "Active" ? "stop" : "start"
+              // Optimistic update
+              setStats(s => ({ ...s, status: action === "start" ? "Active" : "Offline" }))
+              try {
+                await fetch("/api/engine", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action })
+                })
+              } catch (e) {
+                console.error("Failed to toggle engine", e)
+              }
+            }}
+          >
+            {stats.status === "Active" ? "Stop Engine" : "Start Engine"}
+          </Button>
+
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monitoring Status</CardTitle>
-            <Activity className="size-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold text-emerald-500">{stats.status}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Extension is connected</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Leads Today</CardTitle>
-            <Target className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <Skeleton className="h-8 w-16" /> : (
-              <div className="text-2xl font-bold">{stats.leadsToday}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Relevant matches found today</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+            <CardTitle className="text-sm font-medium">Keyword Matches</CardTitle>
             <Users className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             {loading ? <Skeleton className="h-8 w-16" /> : (
-              <div className="text-2xl font-bold">{stats.totalLeads}</div>
+              <div className="text-2xl font-bold">{stats.keywordMatchesToday}</div>
             )}
-            <p className="text-xs text-muted-foreground mt-1">All-time discovered leads</p>
+            <p className="text-xs text-muted-foreground mt-1">Raw posts matched today</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Qualified Leads</CardTitle>
+            <Target className="size-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            {loading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-2xl font-bold text-emerald-500">{stats.leadsToday}</div>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">AI-approved leads today (Total: {stats.totalLeads})</p>
           </CardContent>
         </Card>
       </div>

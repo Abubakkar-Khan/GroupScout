@@ -16,6 +16,8 @@ interface Group {
   name: string
   enabled: boolean
   lastScan: string | null
+  postsScanned: number
+  newPostsToday: number
 }
 
 export default function GroupsPage() {
@@ -160,9 +162,11 @@ export default function GroupsPage() {
                       </Badge>
                     </div>
                     
-                    <p className="text-xs text-muted-foreground mb-6">
-                      Last scan: {group.lastScan ? formatDistanceToNow(new Date(group.lastScan), { addSuffix: true }) : "Never"}
-                    </p>
+                    <div className="text-xs text-muted-foreground mb-6 space-y-1">
+                      <div>Last scan: {group.lastScan ? formatDistanceToNow(new Date(group.lastScan), { addSuffix: true }) : "Never"}</div>
+                      <div>Total Scanned: <span className="font-semibold text-foreground">{group.postsScanned.toLocaleString()}</span> posts</div>
+                      <div>New Today: <span className="font-semibold text-emerald-500">{group.newPostsToday || 0}</span> posts</div>
+                    </div>
                     
                     <div className="mt-auto flex justify-between items-center pt-4 border-t border-border/50">
                       <div className="flex items-center gap-2">

@@ -2,10 +2,9 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, Tags, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { LayoutDashboard, Users, Tags, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Terminal, Bug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-
 
 interface SidebarProps {
   collapsed: boolean
@@ -17,6 +16,8 @@ const navItems = [
   { href: "/dashboard/groups", icon: Users, label: "Groups" },
   { href: "/dashboard/keywords", icon: Tags, label: "Keywords" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
+  { href: "/dashboard/debug", icon: Terminal, label: "Debug Mode" },
+  { href: "/dashboard/parser-test", icon: Bug, label: "Parser Test" },
 ]
 
 export function Sidebar({ collapsed, setCollapsed }: SidebarProps) {

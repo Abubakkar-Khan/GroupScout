@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { authClient } from "@/lib/auth-client"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,15 +23,14 @@ export default function SignupPage() {
     e.preventDefault()
     setLoading(true)
 
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password })
+    const { data, error } = await authClient.signUp.email({
+      name,
+      email,
+      password
     })
 
-    if (!res.ok) {
-      const data = await res.json()
-      toast.error(data.error || "Failed to create account")
+    if (error) {
+      toast.error(error.message || "Failed to create account")
       setLoading(false)
       return
     }

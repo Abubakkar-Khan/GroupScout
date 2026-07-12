@@ -27,6 +27,8 @@ export async function GET() {
       activeTo: settings.activeTo,
       monitoringMode: settings.monitoringMode,
       groqApiKey: !!settings.groqApiKey, // Only return a boolean indicating if it's set
+      useGroq: settings.useGroq,
+      groqSystemPrompt: settings.groqSystemPrompt,
     })
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
@@ -39,7 +41,7 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json()
-    const { scanInterval, autoScrollPages, activeFrom, activeTo, monitoringMode, groqApiKey } = body
+    const { scanInterval, autoScrollPages, activeFrom, activeTo, monitoringMode, groqApiKey, useGroq, groqSystemPrompt } = body
 
     const updateData: any = {
       scanInterval: isNaN(scanInterval) || scanInterval === null ? 5 : scanInterval,
@@ -48,6 +50,9 @@ export async function PATCH(request: Request) {
       activeTo: activeTo || "20:00",
       monitoringMode: monitoringMode || "default",
     }
+    
+    if (useGroq !== undefined) updateData.useGroq = useGroq
+    if (groqSystemPrompt) updateData.groqSystemPrompt = groqSystemPrompt
 
     if (groqApiKey) {
       updateData.groqApiKey = encrypt(groqApiKey)
@@ -69,6 +74,8 @@ export async function PATCH(request: Request) {
       activeTo: settings.activeTo,
       monitoringMode: settings.monitoringMode,
       groqApiKey: !!settings.groqApiKey,
+      useGroq: settings.useGroq,
+      groqSystemPrompt: settings.groqSystemPrompt,
     })
   } catch (error) {
     console.error("Settings PATCH error:", error)

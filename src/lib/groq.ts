@@ -18,7 +18,8 @@ export function getGroqClient(encryptedApiKey: string | null | undefined): Groq 
 export async function classifyPost(
   groq: Groq,
   keyword: string,
-  postContent: string
+  postContent: string,
+  systemPrompt: string
 ): Promise<boolean> {
   try {
     const completion = await groq.chat.completions.create({
@@ -26,7 +27,7 @@ export async function classifyPost(
       messages: [
         {
           role: "system",
-          content: "You are a lead classifier. Determine if this Facebook post is genuinely looking for the service related to the provided keywords. Respond ONLY with valid JSON: {\"relevant\": true/false}",
+          content: systemPrompt || "You are a lead classifier. Determine if this Facebook post is genuinely looking for the service related to the provided keywords. Respond ONLY with valid JSON: {\"relevant\": true/false}",
         },
         {
           role: "user",

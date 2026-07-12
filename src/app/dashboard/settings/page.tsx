@@ -18,7 +18,9 @@ export default function SettingsPage() {
     activeFrom: "08:00",
     activeTo: "20:00",
     monitoringMode: "default",
-    groqApiKey: ""
+    groqApiKey: "",
+    useGroq: true,
+    groqSystemPrompt: ""
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -36,7 +38,9 @@ export default function SettingsPage() {
             activeFrom: data.activeFrom || "08:00",
             activeTo: data.activeTo || "20:00",
             monitoringMode: data.monitoringMode || "default",
-            groqApiKey: data.groqApiKey ? "********" : "" // Mask the actual key
+            groqApiKey: data.groqApiKey ? "********" : "", // Mask the actual key
+            useGroq: data.useGroq ?? true,
+            groqSystemPrompt: data.groqSystemPrompt || ""
           })
         }
       } catch (e) {
@@ -67,7 +71,9 @@ export default function SettingsPage() {
           activeFrom: settings.activeFrom,
           activeTo: settings.activeTo,
           monitoringMode: settings.monitoringMode,
-          groqApiKey: payload.groqApiKey
+          groqApiKey: payload.groqApiKey,
+          useGroq: settings.useGroq,
+          groqSystemPrompt: settings.groqSystemPrompt
         })
       })
       if (res.ok) {
@@ -89,7 +95,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground mt-1">Manage your extension and AI configuration.</p>
+        <p className="text-muted-foreground mt-1">Manage your background worker and AI configuration.</p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6 max-w-3xl">
@@ -98,7 +104,7 @@ export default function SettingsPage() {
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader>
             <CardTitle>Monitoring</CardTitle>
-            <CardDescription>Configure how often the Chrome Extension checks for new posts.</CardDescription>
+            <CardDescription>Configure how often the background worker checks for new posts.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
@@ -158,51 +164,11 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">Outside these hours, the extension will pause automatically to conserve resources.</p>
+            <p className="text-sm text-muted-foreground">Outside these hours, the worker will pause automatically to conserve resources.</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardHeader>
-            <CardTitle>Monitoring Mode</CardTitle>
-            <CardDescription>Choose how the extension handles monitoring Facebook Groups.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <input 
-                  type="radio" 
-                  id="mode-default" 
-                  name="monitoringMode" 
-                  value="default" 
-                  checked={settings.monitoringMode === "default"} 
-                  onChange={(e) => setSettings({ ...settings, monitoringMode: e.target.value })}
-                  className="mt-1"
-                />
-                <div>
-                  <Label htmlFor="mode-default" className="font-semibold text-base">Default Mode</Label>
-                  <p className="text-sm text-muted-foreground">Monitor Facebook Groups that are already open. The extension will automatically attach to any group you visit.</p>
-                </div>
-              </div>
 
-              <div className="flex items-start gap-3">
-                <input 
-                  type="radio" 
-                  id="mode-power" 
-                  name="monitoringMode" 
-                  value="power" 
-                  checked={settings.monitoringMode === "power"} 
-                  onChange={(e) => setSettings({ ...settings, monitoringMode: e.target.value })}
-                  className="mt-1"
-                />
-                <div>
-                  <Label htmlFor="mode-power" className="font-semibold text-base text-primary">Power Mode</Label>
-                  <p className="text-sm text-muted-foreground">Automatically open and manage monitored Facebook Group tabs during active monitoring hours. Opens tabs quietly in the background.</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader>
@@ -227,6 +193,39 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground mt-2">
                 Your key is encrypted and stored securely.
               </p>
+            </div>
+            
+            <div className="pt-4 border-t border-border/50 space-y-4">
+              <div className="flex items-center gap-3">
+                <input 
+                  type="checkbox" 
+                  id="use-groq" 
+                  checked={settings.useGroq} 
+                  onChange={(e) => setSettings({ ...settings, useGroq: e.target.checked })}
+                  className="size-4"
+                />
+                <div>
+                  <Label htmlFor="use-groq" className="font-semibold text-base">Use AI Relevance Filtering</Label>
+                  <p className="text-sm text-muted-foreground">If disabled, all posts containing keywords will be automatically saved as relevant leads.</p>
+                </div>
+              </div>
+              
+              {settings.useGroq && (
+                <div className="space-y-2 text-start mt-4">
+                  <Label>AI System Prompt</Label>
+                  {loading ? <Skeleton className="h-24 w-full" /> : (
+                    <textarea 
+                      value={settings.groqSystemPrompt}
+                      onChange={(e) => setSettings({ ...settings, groqSystemPrompt: e.target.value })}
+                      className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background/50 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      placeholder="You are a lead classifier..."
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Customize how Groq evaluates posts. The AI must return JSON: {"{"}"relevant": true/false{"}"}
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
