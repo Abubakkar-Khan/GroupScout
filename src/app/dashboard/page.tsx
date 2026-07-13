@@ -50,7 +50,10 @@ export default function DashboardPage() {
           fetch("/api/posts?relevant=true&limit=20"), // Fetch recent leads
           fetch("/api/stats")
         ])
-        if (leadsRes.ok) setLeads(await leadsRes.json())
+        if (leadsRes.ok) {
+          const data = await leadsRes.json()
+          setLeads(data.posts || data)
+        }
         if (statsRes.ok) setStats(await statsRes.json())
       } catch (e) {
         console.error(e)
@@ -164,9 +167,9 @@ export default function DashboardPage() {
           <CardTitle>Recent Leads</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">Highest intent posts requiring action</p>
         </CardHeader>
-        <CardContent className="flex-1">
-        <div className="rounded-md border border-border/50 overflow-hidden">
-          <Table className="table-fixed">
+        <CardContent className="flex-1 p-0 overflow-x-auto">
+        <div className="min-w-[800px]">
+          <Table className="table-fixed w-full">
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-[140px] md:w-[200px]">Group</TableHead>

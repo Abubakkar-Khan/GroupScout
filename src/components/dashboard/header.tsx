@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell } from "lucide-react"
+import { Bell, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
-export function Header() {
+export function Header({ setMobileOpen }: { setMobileOpen?: (open: boolean) => void }) {
   const [user, setUser] = useState<{name: string, email: string} | null>(null)
 
   useEffect(() => {
@@ -18,20 +18,28 @@ export function Header() {
   }, [])
 
   return (
-    <header className="flex h-14 items-center justify-end border-b border-border bg-background/50 backdrop-blur-xl px-6 gap-4">
-      <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-        <Bell className="size-4" />
-        <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
-      </Button>
-      
-      <div className="flex items-center gap-2">
-        <div className="text-right hidden sm:block">
-          <p className="text-sm font-medium leading-none">{user?.name}</p>
-          <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
+    <header className="flex h-14 items-center justify-between lg:justify-end border-b border-border bg-background/50 backdrop-blur-xl px-4 sm:px-6 gap-4">
+      <div className="flex lg:hidden">
+        <Button variant="ghost" size="icon" onClick={() => setMobileOpen?.(true)} className="text-muted-foreground hover:text-foreground">
+          <Menu className="size-5" />
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
+          <Bell className="size-4" />
+          <span className="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
+        </Button>
+        
+        <div className="flex items-center gap-2">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-medium leading-none">{user?.name}</p>
+            <p className="text-xs text-muted-foreground mt-1">{user?.email}</p>
+          </div>
+          <Avatar className="size-8 border border-border">
+            <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+          </Avatar>
         </div>
-        <Avatar className="size-8 border border-border">
-          <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
-        </Avatar>
       </div>
     </header>
   )

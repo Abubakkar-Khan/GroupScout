@@ -10,21 +10,48 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const limit = parseInt(searchParams.get("limit") || "50")
+  const page = parseInt(searchParams.get("page") || "0")
   const relevantParam = searchParams.get("relevant")
   const viewedParam = searchParams.get("viewed")
+  const searchParam = searchParams.get("search")
   
   const whereClause: Prisma.PostWhereInput = { userId: session.user.id }
   if (relevantParam === "true") whereClause.relevant = true
   if (relevantParam === "false") whereClause.relevant = false
   if (viewedParam === "true") whereClause.viewed = true
   if (viewedParam === "false") whereClause.viewed = false
+  
+  if (searchParam) {
+    whereClause.OR = [
+      { content: { contains: searchParam, mode: 'insensitive' } },
+      { keyword: { contains: searchParam, mode: 'insensitive' } },
+      { group: { name: { contains: searchParam, mode: 'insensitive' } } }
+    ]
+  }
 
   try {
+    const skip = page > 0 ? (page - 1) * limit : 0
+    
+    if (searchParams.has("page")) {
+      const [posts, totalCount] = await Promise.all([
+        prisma.post.findMany({
+          where: whereClause,
+          include: { group: true },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          skip: skip,
+        }),
+        prisma.post.count({ where: whereClause })
+      ])
+      return NextResponse.json({ posts, totalCount })
+    }
+
     const posts = await prisma.post.findMany({
       where: whereClause,
       include: { group: true },
       orderBy: { createdAt: "desc" },
       take: limit,
+      skip: skip,
     })
     return NextResponse.json(posts)
   } catch {

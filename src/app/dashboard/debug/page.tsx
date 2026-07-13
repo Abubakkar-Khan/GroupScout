@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Terminal } from "lucide-react"
+import { RefreshCw, Terminal, Trash2, Search, Filter } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface LogEvent {
@@ -17,6 +17,8 @@ interface LogEvent {
 export default function DebugPage() {
   const [logs, setLogs] = useState<LogEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [logTypeFilter, setLogTypeFilter] = useState("ALL")
 
   const fetchLogs = async () => {
     try {
@@ -29,6 +31,15 @@ export default function DebugPage() {
       console.error(error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const clearLogs = async () => {
+    try {
+      await fetch("/api/logs", { method: "DELETE" })
+      setLogs([])
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -53,18 +64,61 @@ export default function DebugPage() {
     }
   }
 
+  const filteredLogs = logs.filter(log => {
+    if (logTypeFilter !== "ALL" && log.type !== logTypeFilter) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      if (!log.message.toLowerCase().includes(q) && !(log.metadata && log.metadata.toLowerCase().includes(q))) return false
+    }
+    return true
+  })
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Terminal className="h-6 w-6" /> Debug Terminal
           </h1>
-          <p className="text-muted-foreground mt-1">Live event stream from the GroupScout extension engine.</p>
+          <p className="text-muted-foreground mt-1">Live event stream from the Playwright background engine.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-        </Button>
+        <div className="flex gap-2 items-center w-full sm:w-auto">
+          <Button variant="outline" size="sm" onClick={clearLogs} className="gap-2 text-muted-foreground hover:text-destructive">
+            <Trash2 className="h-4 w-4" /> Clear
+          </Button>
+          <Button variant="default" size="sm" onClick={fetchLogs} disabled={loading} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <input 
+            type="text" 
+            placeholder="Search logs..." 
+            className="flex h-9 w-full rounded-md border border-input bg-transparent pl-9 pr-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="relative w-full sm:w-48">
+          <Filter className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <select 
+            className="h-9 w-full appearance-none rounded-md border border-input bg-transparent pl-9 pr-8 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={logTypeFilter}
+            onChange={(e) => setLogTypeFilter(e.target.value)}
+          >
+            <option value="ALL">All Levels</option>
+            <option value="INFO">Info</option>
+            <option value="ERROR">Error</option>
+            <option value="WARN">Warning</option>
+            <option value="SUCCESS">Success</option>
+            <option value="STATE_SYNC">State Sync</option>
+          </select>
+          <div className="pointer-events-none absolute right-3 top-[14px] h-[5px] w-[5px] border-l-[1.5px] border-b-[1.5px] border-muted-foreground -rotate-45 transform"></div>
+        </div>
       </div>
 
       <Card className="bg-black/90 text-green-400 border-border/50 font-mono text-sm overflow-hidden shadow-xl">
@@ -76,12 +130,14 @@ export default function DebugPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-h-[700px] overflow-y-auto custom-scrollbar p-4 space-y-1">
-            {logs.length === 0 && !loading ? (
-              <div className="text-center text-white/30 py-8">No logs received yet...</div>
+          <div className="h-[600px] overflow-y-auto custom-scrollbar p-4 space-y-1">
+            {filteredLogs.length === 0 ? (
+              <div className="text-center text-white/30 py-8">
+                {loading ? "Loading logs..." : "No logs found..."}
+              </div>
             ) : (
-              logs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 hover:bg-white/5 p-1 rounded transition-colors group">
+              filteredLogs.map((log) => (
+                <div key={log.id} className="flex items-start gap-3 hover:bg-white/5 p-1.5 rounded transition-colors group">
                   <span className="text-white/30 shrink-0 mt-0.5 text-xs">
                     [{new Date(log.createdAt).toLocaleTimeString()}]
                   </span>
@@ -91,8 +147,14 @@ export default function DebugPage() {
                   <div className="flex-1 min-w-0">
                     <span className="text-white/90 break-words">{log.message}</span>
                     {log.metadata && log.type !== "STATE_SYNC" && (
-                      <pre className="mt-1 text-[10px] text-white/50 bg-black/50 p-2 rounded overflow-x-auto border border-white/5">
-                        {JSON.stringify(JSON.parse(log.metadata), null, 2)}
+                      <pre className="mt-1.5 text-[10px] text-white/50 bg-black/50 p-2.5 rounded overflow-x-auto border border-white/5">
+                        {(() => {
+                          try {
+                            return JSON.stringify(JSON.parse(log.metadata), null, 2)
+                          } catch {
+                            return String(log.metadata)
+                          }
+                        })()}
                       </pre>
                     )}
                   </div>

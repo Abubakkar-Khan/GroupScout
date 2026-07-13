@@ -48,11 +48,11 @@ GroupScout is a modern, privacy-first Next.js SaaS dashboard that automatically 
 
 ```mermaid
 graph TD
-    A[Next.js Server Loop] -->|Engine Interval| B(Playwright Context)
+    A[Next.js API Engine] -->|Node Interval| B(Playwright Context)
     B -->|Navigation & Scroll| C[Facebook Group]
     C -->|GraphQL JSON Response| D{Network Interceptor}
     D -->|Extract Post| E[Keyword Match Filter]
-    E -- Match --> F[Groq API LLM]
+    E -- Match --> F[Groq API LLM LLaMA 3]
     E -- No Match --> G[Ignore]
     F -->|Is Relevant?| H{True/False}
     H -- True --> I[(PostgreSQL)]

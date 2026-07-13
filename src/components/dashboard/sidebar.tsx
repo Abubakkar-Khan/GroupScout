@@ -2,35 +2,39 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, Tags, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Terminal, Bug } from "lucide-react"
+import { LayoutDashboard, Users, Tags, Settings, LogOut, PanelLeftClose, PanelLeftOpen, Terminal, Bug, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
   collapsed: boolean
   setCollapsed: (collapsed: boolean) => void
+  mobileOpen?: boolean
+  setMobileOpen?: (open: boolean) => void
 }
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
+  { href: "/dashboard/leads", icon: Target, label: "All Leads" },
   { href: "/dashboard/groups", icon: Users, label: "Groups" },
   { href: "/dashboard/keywords", icon: Tags, label: "Keywords" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
   { href: "/dashboard/debug", icon: Terminal, label: "Debug Mode" },
-  { href: "/dashboard/parser-test", icon: Bug, label: "Parser Test" },
 ]
 
-export function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
+export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) {
   const pathname = usePathname()
 
   return (
     <div
       className={cn(
-        "flex flex-col border-r border-border bg-card/30 backdrop-blur-xl transition-all duration-300",
+        "flex flex-col border-r border-border bg-background transition-transform duration-300 h-full",
+        "fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 lg:transition-all",
+        mobileOpen ? "translate-x-0" : "-translate-x-full",
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="flex h-14 items-center justify-between px-4 border-b border-border">
+      <div className="flex h-14 items-center justify-between px-4 border-b border-border shrink-0">
         {!collapsed && (
           <Link href="/dashboard" className="font-semibold tracking-tight flex items-center gap-2">
             <div className="size-6 rounded bg-white text-black flex items-center justify-center font-bold text-xs">
@@ -54,6 +58,7 @@ export function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setMobileOpen?.(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   isActive
