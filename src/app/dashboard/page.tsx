@@ -25,6 +25,18 @@ interface Lead {
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
+const getCompactTime = (date: string) => {
+  const now = new Date()
+  const diffInSeconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000)
+  if (diffInSeconds < 60) return "Just now"
+  const diffInMinutes = Math.floor(diffInSeconds / 60)
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+  const diffInHours = Math.floor(diffInMinutes / 60)
+  if (diffInHours < 24) return `${diffInHours}h ago`
+  const diffInDays = Math.floor(diffInHours / 24)
+  return `${diffInDays}d ago`
+}
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [stats, setStats] = useState({ leadsToday: 0, totalLeads: 0, keywordMatchesToday: 0, totalScraped: 0, status: "Offline" })
@@ -189,7 +201,7 @@ export default function DashboardPage() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <Avatar className="size-6 rounded-md shrink-0 border border-border/50">
-                          <AvatarImage src={lead.group?.iconUrl || ""} className="object-cover" />
+                          <AvatarImage src={lead.group?.iconUrl || undefined} className="object-cover" />
                           <AvatarFallback className="text-[10px] rounded-md">{lead.group?.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <span className="truncate" title={lead.group?.name}>{lead.group?.name || "Unknown Group"}</span>
@@ -220,14 +232,14 @@ export default function DashboardPage() {
                         </Button>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true })}
+                    <TableCell className="text-muted-foreground whitespace-nowrap text-xs font-medium">
+                      {getCompactTime(lead.createdAt)}
                     </TableCell>
                     <TableCell>
                       {lead.viewed ? (
                         <Badge variant="outline" className="text-muted-foreground border-border">Viewed</Badge>
                       ) : (
-                        <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/20">New</Badge>
+                        <Badge className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none shadow-sm shadow-indigo-500/20 font-medium">New</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -235,7 +247,7 @@ export default function DashboardPage() {
                         href={lead.url} 
                         target="_blank" 
                         rel="noopener noreferrer" 
-                        className={buttonVariants({ variant: "outline", size: "sm", className: "gap-2" })}
+                        className={buttonVariants({ variant: "outline", size: "sm", className: "gap-1.5 h-8 px-3 text-xs font-medium" })}
                         onClick={() => {
                           if (!lead.viewed) {
                             fetch(`/api/posts/${lead.id}`, { method: 'PATCH', body: JSON.stringify({ viewed: true }) })
@@ -243,7 +255,7 @@ export default function DashboardPage() {
                           }
                         }}
                       >
-                        Open Facebook <ExternalLink className="h-3 w-3" />
+                        Open <ExternalLink className="h-3 w-3" />
                       </a>
                     </TableCell>
                   </TableRow>
@@ -260,7 +272,7 @@ export default function DashboardPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <Avatar className="size-8 rounded-md border border-border/50">
-                <AvatarImage src={selectedPost?.group?.iconUrl || ""} className="object-cover" />
+                <AvatarImage src={selectedPost?.group?.iconUrl || undefined} className="object-cover" />
                 <AvatarFallback className="rounded-md">{selectedPost?.group?.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col gap-0.5">

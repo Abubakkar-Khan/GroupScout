@@ -67,14 +67,57 @@ graph TD
 ```mermaid
 erDiagram
     User ||--o{ Session : has
+    User ||--o{ Account : has
     User ||--o{ Keyword : defines
     User ||--o{ MonitoredGroup : monitors
     User ||--o{ Post : receives
+    User ||--o{ LogEvent : logs
     User ||--o| Settings : configures
 
     User {
         string id PK
+        string name
         string email
+        boolean emailVerified
+        string image
+        DateTime createdAt
+        DateTime updatedAt
+    }
+
+    Session {
+        string id PK
+        DateTime expiresAt
+        string token
+        DateTime createdAt
+        DateTime updatedAt
+        string ipAddress
+        string userAgent
+        string userId FK
+    }
+
+    Account {
+        string id PK
+        string accountId
+        string providerId
+        string userId FK
+        string accessToken
+        string refreshToken
+        string idToken
+        DateTime accessTokenExpiresAt
+        DateTime refreshTokenExpiresAt
+        string scope
+        string password
+        DateTime createdAt
+        DateTime updatedAt
+    }
+
+    Verification {
+        string id PK
+        string identifier
+        string value
+        DateTime expiresAt
+        DateTime createdAt
+        DateTime updatedAt
     }
 
     Settings {
@@ -83,13 +126,19 @@ erDiagram
         int scanInterval
         string activeFrom
         string activeTo
+        string monitoringMode
+        int autoScrollPages
         string groqApiKey
+        boolean useGroq
+        string groqSystemPrompt
     }
 
     Keyword {
         string id PK
+        string userId FK
         string keyword
         boolean enabled
+        DateTime createdAt
     }
 
     MonitoredGroup {
@@ -98,22 +147,39 @@ erDiagram
         string name
         string iconUrl
         boolean enabled
+        DateTime lastScan
+        int postsScanned
+        string userId FK
+        DateTime createdAt
+    }
+
+    LogEvent {
+        string id PK
+        string userId FK
+        string type
+        string message
+        string metadata
+        DateTime createdAt
     }
 
     Post {
         string id PK
+        string userId FK
         string facebookPostId
         string groupId FK
+        string keyword
         string content
+        string url
         boolean relevant
         boolean viewed
+        DateTime createdAt
     }
 ```
 
 ---
 
 ## Tech Stack
-- **Frontend:** Next.js 15 (React 19), Tailwind CSS, Shadcn UI, Lucide Icons.
+- **Frontend:** Next.js 16 (React 19), Tailwind CSS, Shadcn UI, Lucide Icons.
 - **Backend Engine:** Playwright, Node.js Intervals.
 - **Database:** Prisma ORM, PostgreSQL.
 - **AI:** Groq SDK (llama-3.1-8b-instant).

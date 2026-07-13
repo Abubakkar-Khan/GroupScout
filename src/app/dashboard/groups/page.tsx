@@ -163,7 +163,7 @@ export default function GroupsPage() {
                     <div className="flex justify-between items-start mb-4 gap-4">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <Avatar className="size-10 rounded-md border border-border/50 bg-muted shrink-0">
-                          <AvatarImage src={group.iconUrl || ""} alt={group.name} className="object-cover" />
+                          <AvatarImage src={group.iconUrl || undefined} alt={group.name} className="object-cover" />
                           <AvatarFallback className="rounded-md">{group.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <h3 className="font-semibold text-sm leading-tight line-clamp-2" title={group.name}>{group.name}</h3>
